@@ -53,7 +53,7 @@ def load_shap_values():
 def load_feature_names():
     path = SHAP_DIR / "feature_names.json"
     if path.exists():
-        return json.loads(path.read_text())
+        return json.loads(path.read_text(encoding='utf-8'))
     path = SHAP_DIR / "feature_names.npy"
     if path.exists():
         return list(np.load(path, allow_pickle=True))
@@ -65,7 +65,7 @@ def load_feature_names():
 def load_explanations_json():
     path = SHAP_DIR / "explanations.json"
     if path.exists():
-        return json.loads(path.read_text())
+        return json.loads(path.read_text(encoding='utf-8'))
     return None
 
 
@@ -76,7 +76,7 @@ def load_account_ids():
         return list(np.load(path, allow_pickle=True))
     path = SHAP_DIR / "account_ids.json"
     if path.exists():
-        return json.loads(path.read_text())
+        return json.loads(path.read_text(encoding='utf-8'))
     return None
 
 

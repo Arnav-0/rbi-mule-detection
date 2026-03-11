@@ -42,7 +42,7 @@ def load_all_reports():
     reports = {}
     for f in REPORTS_DIR.glob("*_report.json"):
         try:
-            data = json.loads(f.read_text())
+            data = json.loads(f.read_text(encoding='utf-8'))
             if not isinstance(data, dict):
                 continue
             model_name = f.stem.replace("_report", "")
@@ -52,7 +52,7 @@ def load_all_reports():
     bench_path = REPORTS_DIR / "benchmark_results.json"
     if bench_path.exists():
         try:
-            bench = json.loads(bench_path.read_text())
+            bench = json.loads(bench_path.read_text(encoding='utf-8'))
             if isinstance(bench, dict):
                 for name, data in bench.items():
                     if not isinstance(data, dict):

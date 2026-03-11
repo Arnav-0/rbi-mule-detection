@@ -40,7 +40,7 @@ def get_live_stats():
     import json
     report_path = Path("outputs/reports/lightgbm_report.json")
     if report_path.exists():
-        report = json.loads(report_path.read_text())
+        report = json.loads(report_path.read_text(encoding='utf-8'))
         metrics = report.get("metrics", {})
         stats["auc"] = f"{metrics.get('auc_roc', 0):.4f}"
     return stats

@@ -40,7 +40,7 @@ def load_fairness_reports():
     reports = []
     for f in REPORTS_DIR.glob("fairness_*.json"):
         try:
-            data = json.loads(f.read_text())
+            data = json.loads(f.read_text(encoding='utf-8'))
             if isinstance(data, list):
                 reports.extend(data)
             else:
@@ -51,7 +51,7 @@ def load_fairness_reports():
     main_path = REPORTS_DIR / "fairness_report.json"
     if main_path.exists() and not reports:
         try:
-            data = json.loads(main_path.read_text())
+            data = json.loads(main_path.read_text(encoding='utf-8'))
             if isinstance(data, list):
                 reports = data
             elif isinstance(data, dict):

@@ -1,164 +1,198 @@
 {
-  "LightGBM": {
-    "model_type": "LightGBM",
-    "metrics": {
-      "auc_roc": 0.9889,
-      "auc_pr": 0.8685,
-      "f1_score": 0.5802,
-      "precision": 0.4312,
-      "recall": 0.8868,
-      "accuracy": 0.9858
-    },
-    "confusion_matrix": [
-      [4690, 62],
-      [6, 47]
-    ],
-    "params": {
-      "boosting_type": "gbdt",
-      "colsample_bytree": 0.8946,
-      "learning_rate": 0.0363,
-      "max_depth": 6,
-      "min_child_samples": 76,
-      "n_estimators": 1054,
-      "num_leaves": 297,
-      "reg_alpha": 0.0125,
-      "reg_lambda": 3.7261,
-      "subsample": 0.8552,
-      "is_unbalance": true
-    },
-    "n_train": 19218,
-    "n_val": 4805,
-    "val_mule_rate": 0.011
-  },
-  "XGBoost": {
-    "model_type": "XGBoost",
-    "metrics": {
-      "auc_roc": 0.9097,
-      "auc_pr": 0.4568,
-      "f1_score": 0.5111,
-      "precision": 0.3939,
-      "recall": 0.7358,
-      "accuracy": 0.9791
-    },
-    "confusion_matrix": [
-      [4680, 72],
-      [14, 39]
-    ],
-    "params": {
-      "booster": "gbtree",
-      "learning_rate": 0.05,
-      "max_depth": 5,
-      "n_estimators": 800,
-      "subsample": 0.85,
-      "colsample_bytree": 0.9,
-      "reg_alpha": 0.1,
-      "reg_lambda": 5.0,
-      "scale_pos_weight": 90
-    },
-    "n_train": 19218,
-    "n_val": 4805,
-    "val_mule_rate": 0.011
-  },
-  "CatBoost": {
-    "model_type": "CatBoost",
-    "metrics": {
-      "auc_roc": 0.9109,
-      "auc_pr": 0.4587,
-      "f1_score": 0.4779,
-      "precision": 0.3611,
-      "recall": 0.7170,
-      "accuracy": 0.9770
-    },
-    "confusion_matrix": [
-      [4674, 78],
-      [15, 38]
-    ],
-    "params": {
-      "iterations": 1000,
-      "learning_rate": 0.03,
-      "depth": 6,
-      "l2_leaf_reg": 5.0,
-      "auto_class_weights": "Balanced",
-      "eval_metric": "AUC"
-    },
-    "n_train": 19218,
-    "n_val": 4805,
-    "val_mule_rate": 0.011
-  },
-  "Random Forest": {
-    "model_type": "Random Forest",
-    "metrics": {
-      "auc_roc": 0.9052,
-      "auc_pr": 0.4626,
-      "f1_score": 0.5000,
-      "precision": 0.3810,
-      "recall": 0.7170,
-      "accuracy": 0.9783
-    },
-    "confusion_matrix": [
-      [4678, 74],
-      [15, 38]
-    ],
-    "params": {
-      "n_estimators": 500,
-      "max_depth": 12,
-      "min_samples_split": 10,
-      "min_samples_leaf": 4,
-      "max_features": "sqrt",
-      "class_weight": "balanced_subsample"
-    },
-    "n_train": 19218,
-    "n_val": 4805,
-    "val_mule_rate": 0.011
-  },
-  "Logistic Regression": {
-    "model_type": "Logistic Regression",
+  "logistic_regression": {
+    "model_type": "logistic_regression",
     "metrics": {
       "auc_roc": 0.8278,
       "auc_pr": 0.3458,
-      "f1_score": 0.4421,
-      "precision": 0.3231,
-      "recall": 0.6981,
-      "accuracy": 0.9720
+      "f1_score": 0.1022,
+      "precision": 0.0562,
+      "recall": 0.566,
+      "accuracy": 0.8903
     },
     "confusion_matrix": [
-      [4660, 92],
-      [16, 37]
+      [
+        4248,
+        504
+      ],
+      [
+        23,
+        30
+      ]
     ],
     "params": {
-      "penalty": "l2",
-      "C": 0.1,
-      "solver": "lbfgs",
-      "max_iter": 1000,
-      "class_weight": "balanced"
+      "C": 0.006063645235997551,
+      "penalty": "l1",
+      "solver": "saga"
     },
     "n_train": 19218,
     "n_val": 4805,
     "val_mule_rate": 0.011
   },
-  "Neural Network": {
-    "model_type": "Neural Network",
+  "random_forest": {
+    "model_type": "random_forest",
     "metrics": {
-      "auc_roc": 0.8638,
-      "auc_pr": 0.4412,
-      "f1_score": 0.5238,
-      "precision": 0.4074,
-      "recall": 0.7547,
-      "accuracy": 0.9799
+      "auc_roc": 0.907,
+      "auc_pr": 0.4985,
+      "f1_score": 0.4889,
+      "precision": 0.5946,
+      "recall": 0.4151,
+      "accuracy": 0.9904
     },
     "confusion_matrix": [
-      [4685, 67],
-      [13, 40]
+      [
+        4737,
+        15
+      ],
+      [
+        31,
+        22
+      ]
     ],
     "params": {
-      "architecture": "MLP",
-      "hidden_layers": [128, 64, 32],
-      "activation": "ReLU",
-      "dropout": 0.3,
-      "learning_rate": 0.001,
-      "epochs": 100,
-      "batch_size": 256,
-      "optimizer": "Adam"
+      "n_estimators": 100,
+      "max_depth": 20,
+      "min_samples_split": 12,
+      "min_samples_leaf": 8,
+      "max_features": "sqrt"
+    },
+    "n_train": 19218,
+    "n_val": 4805,
+    "val_mule_rate": 0.011
+  },
+  "xgboost": {
+    "model_type": "xgboost",
+    "metrics": {
+      "auc_roc": 0.874,
+      "auc_pr": 0.4647,
+      "f1_score": 0.2703,
+      "precision": 0.1775,
+      "recall": 0.566,
+      "accuracy": 0.9663
+    },
+    "confusion_matrix": [
+      [
+        4613,
+        139
+      ],
+      [
+        23,
+        30
+      ]
+    ],
+    "params": {
+      "n_estimators": 1085,
+      "max_depth": 7,
+      "learning_rate": 0.16168354976743102,
+      "subsample": 0.6132616927758845,
+      "colsample_bytree": 0.9536269395318369,
+      "min_child_weight": 5,
+      "gamma": 1.2821543177290273,
+      "reg_alpha": 1.3563668189634855e-08,
+      "reg_lambda": 0.20454584186686856
+    },
+    "n_train": 19218,
+    "n_val": 4805,
+    "val_mule_rate": 0.011
+  },
+  "catboost": {
+    "model_type": "catboost",
+    "metrics": {
+      "auc_roc": 0.921,
+      "auc_pr": 0.493,
+      "f1_score": 0.3713,
+      "precision": 0.2719,
+      "recall": 0.5849,
+      "accuracy": 0.9781
+    },
+    "confusion_matrix": [
+      [
+        4669,
+        83
+      ],
+      [
+        22,
+        31
+      ]
+    ],
+    "params": {
+      "iterations": 744,
+      "depth": 10,
+      "learning_rate": 0.020812025216593356,
+      "l2_leaf_reg": 9.083075717896218,
+      "bagging_temperature": 0.8035270912278458,
+      "random_strength": 1.1713457078464862,
+      "border_count": 112
+    },
+    "n_train": 19218,
+    "n_val": 4805,
+    "val_mule_rate": 0.011
+  },
+  "lightgbm": {
+    "model_type": "lightgbm",
+    "metrics": {
+      "auc_roc": 0.9067,
+      "auc_pr": 0.4902,
+      "f1_score": 0.2551,
+      "precision": 0.1632,
+      "recall": 0.5849,
+      "accuracy": 0.9623
+    },
+    "confusion_matrix": [
+      [
+        4593,
+        159
+      ],
+      [
+        22,
+        31
+      ]
+    ],
+    "params": {
+      "n_estimators": 370,
+      "max_depth": 5,
+      "learning_rate": 0.016473803723557428,
+      "num_leaves": 271,
+      "subsample": 0.915098034693852,
+      "colsample_bytree": 0.714053303507154,
+      "min_child_samples": 29,
+      "reg_alpha": 3.2615449777253696e-05,
+      "reg_lambda": 1.3388305800902985e-05
+    },
+    "n_train": 19218,
+    "n_val": 4805,
+    "val_mule_rate": 0.011
+  },
+  "neural_net": {
+    "model_type": "neural_net",
+    "metrics": {
+      "auc_roc": 0.8101,
+      "auc_pr": 0.3108,
+      "f1_score": 0.3333,
+      "precision": 0.4054,
+      "recall": 0.283,
+      "accuracy": 0.9875
+    },
+    "confusion_matrix": [
+      [
+        4730,
+        22
+      ],
+      [
+        38,
+        15
+      ]
+    ],
+    "params": {
+      "n_layers": 3,
+      "hidden_dims": [
+        74,
+        178,
+        161
+      ],
+      "lr": 0.0014747425857385417,
+      "dropout": 0.23231746444782483,
+      "batch_size": 128,
+      "weight_decay": 0.00046698522460882124
     },
     "n_train": 19218,
     "n_val": 4805,

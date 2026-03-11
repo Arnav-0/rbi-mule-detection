@@ -154,7 +154,7 @@ def compute_features_realtime(
     result["burst_after_dormancy"] = float(result["dormancy_days"] > 0 and recent_count > 10)
 
     # Monthly CV
-    monthly_counts = txn.set_index("transaction_date").resample("ME").size()
+    monthly_counts = txn.set_index("transaction_date").resample("M").size()
     if len(monthly_counts) >= 2:
         result["monthly_txn_cv"] = monthly_counts.std() / max(monthly_counts.mean(), 0.01)
     else:

@@ -85,7 +85,7 @@ def startup_load_model() -> None:
     threshold_path = OUTPUTS_DIR / "reports" / "threshold.txt"
     if threshold_path.exists():
         try:
-            model_service.threshold = float(threshold_path.read_text().strip())
+            model_service.threshold = float(threshold_path.read_text(encoding='utf-8').strip())
             logger.info("Loaded threshold: %.4f", model_service.threshold)
         except ValueError:
             pass

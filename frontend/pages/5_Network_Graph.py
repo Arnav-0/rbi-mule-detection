@@ -191,7 +191,7 @@ if edges is not None:
 
             with tempfile.NamedTemporaryFile(suffix=".html", delete=False, mode="w") as f:
                 net.save_graph(f.name)
-                html_content = Path(f.name).read_text()
+                html_content = Path(f.name).read_text(encoding='utf-8')
 
             components.html(html_content, height=720, scrolling=False)
 
