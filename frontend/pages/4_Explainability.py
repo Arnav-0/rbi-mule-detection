@@ -145,7 +145,7 @@ with tab_bar:
 with tab_beeswarm:
     beeswarm_path = PLOTS_DIR / "shap_beeswarm.png"
     if beeswarm_path.exists():
-        st.image(str(beeswarm_path), caption="SHAP Beeswarm Plot", use_container_width=True)
+        st.image(str(beeswarm_path), caption="SHAP Beeswarm Plot", use_column_width=True)
     elif shap_values is not None and feature_names:
         info_callout(
             "How to read the beeswarm",
@@ -284,7 +284,7 @@ with tab_pdp:
             if selected_pdp:
                 img_path = pdp_dir / f"{selected_pdp}.png"
                 if img_path.exists():
-                    st.image(str(img_path), caption=f"PDP: {selected_pdp}", use_container_width=True)
+                    st.image(str(img_path), caption=f"PDP: {selected_pdp}", use_column_width=True)
         else:
             empty_state("No PDP plots found", "Expected in <code>outputs/plots/pdp/</code>")
     else:
