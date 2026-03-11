@@ -1,0 +1,41 @@
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./outputs/models:/app/models
+      - ./outputs/db:/app/db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dashboard
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    volumes:
+      - ./outputs:/app/outputs
+      - ./data/processed:/app/data/processed
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s

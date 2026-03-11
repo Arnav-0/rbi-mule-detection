@@ -1,0 +1,62 @@
+# Data files (large CSVs — not for version control)
+data/raw/
+
+# Large database files
+outputs/db/
+outputs/logs/
+
+# CatBoost training artifacts
+catboost_info/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+.env.local
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# Caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Experiment tracking
+wandb/
+
+# Logs
+*.log
+
+# Temporary
+*.tmp
+*.bak
+
+# Misc
+nul
