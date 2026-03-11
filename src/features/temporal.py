@@ -1,11 +1,7 @@
-"""Group 3: Temporal features (8 features) — dormancy, bursts, unusual timing."""
-from __future__ import annotations
-
 import numpy as np
 import pandas as pd
-from src.features.base import BaseFeatureGenerator
 
-NIGHT_HOURS = {23, 0, 1, 2, 3, 4, 5}
+from src.features.base import BaseFeatureGenerator
 
 
 class TemporalFeatureGenerator(BaseFeatureGenerator):
@@ -19,80 +15,73 @@ class TemporalFeatureGenerator(BaseFeatureGenerator):
             'monthly_txn_cv', 'days_to_first_txn',
         ]
 
-    def compute(self, txn: pd.DataFrame, profile: pd.DataFrame, cutoff_date=None, **kwargs) -> pd.DataFrame:
+    def compute(self, txn, profile=None, cutoff_date=None, **kwargs):
         if cutoff_date is None:
             cutoff_date = pd.Timestamp('2025-06-30')
+        cutoff_date = pd.Timestamp(cutoff_date)
 
         txn = txn.copy()
         txn['transaction_date'] = pd.to_datetime(txn['transaction_date'])
         txn_valid = txn[txn['transaction_date'] <= cutoff_date].copy()
 
-        # Derive hour/weekend if not present
         if 'transaction_hour' not in txn_valid.columns:
             txn_valid['transaction_hour'] = txn_valid['transaction_date'].dt.hour
         if 'is_weekend' not in txn_valid.columns:
-            txn_valid['is_weekend'] = txn_valid['transaction_date'].dt.dayofweek >= 5
+            txn_valid['is_weekend'] = txn_valid['transaction_date'].dt.dayofweek.isin([5, 6]).astype(int)
+        if 'is_night' not in txn_valid.columns:
+            txn_valid['is_night'] = txn_valid['transaction_hour'].isin([23, 0, 1, 2, 3, 4, 5]).astype(int)
 
-        if profile is not None and len(profile) > 0:
-            all_accounts = profile['account_id'].unique()
-        else:
-            all_accounts = txn_valid['account_id'].unique()
+        all_accounts = (
+            profile['account_id'].unique() if profile is not None and 'account_id' in profile.columns
+            else txn_valid['account_id'].unique()
+        )
+        result = pd.DataFrame(0.0, index=pd.Index(all_accounts, name='account_id'),
+                              columns=self.get_feature_names())
 
-        cutoff_30d = cutoff_date - pd.Timedelta(days=30)
+        grp = txn_valid.groupby('account_id')
 
-        # Pre-build open_date lookup to avoid O(n*m) profile scans in the loop
-        open_date_map: dict = {}
-        if profile is not None and 'account_open_date' in profile.columns:
-            for _, prow in profile.iterrows():
-                if pd.notna(prow['account_open_date']):
-                    open_date_map[prow['account_id']] = pd.to_datetime(prow['account_open_date'])
+        # Vectorized: unusual_hour_ratio, weekend_ratio, night_weekend_combo
+        result['unusual_hour_ratio'] = grp['is_night'].mean().reindex(all_accounts, fill_value=0)
+        result['weekend_ratio'] = grp['is_weekend'].mean().reindex(all_accounts, fill_value=0)
+        result['night_weekend_combo'] = result['unusual_hour_ratio'] * result['weekend_ratio']
 
-        rows = {}
-        for acc_id, grp in txn_valid.groupby('account_id'):
-            grp = grp.sort_values('transaction_date')
-            dates = grp['transaction_date']
+        # Max gap and dormancy — need sorted dates per account
+        txn_sorted = txn_valid[['account_id', 'transaction_date']].sort_values(['account_id', 'transaction_date'])
+        txn_sorted['prev_date'] = txn_sorted.groupby('account_id')['transaction_date'].shift(1)
+        txn_sorted['gap_days'] = (txn_sorted['transaction_date'] - txn_sorted['prev_date']).dt.days
 
-            gaps = dates.diff().dt.days.dropna()
-            max_gap = float(gaps.max()) if len(gaps) > 0 else 0.0
-            dormancy = max_gap if max_gap > 90 else 0.0
+        max_gaps = txn_sorted.groupby('account_id')['gap_days'].max().reindex(all_accounts, fill_value=0)
+        result['max_gap_days'] = max_gaps
+        result['dormancy_days'] = max_gaps.where(max_gaps > 90, 0)
 
-            recent_count = int((dates > cutoff_30d).sum())
-            burst = 1.0 if (dormancy > 0 and recent_count > 10) else 0.0
+        # Burst after dormancy: dormancy > 0 and >10 txns in last 30d
+        window_30d_start = cutoff_date - pd.Timedelta(days=30)
+        recent_txn = txn_valid[txn_valid['transaction_date'] > window_30d_start]
+        recent_counts = recent_txn.groupby('account_id').size().reindex(all_accounts, fill_value=0)
+        result['burst_after_dormancy'] = ((result['dormancy_days'] > 0) & (recent_counts > 10)).astype(float)
 
-            hours = grp['transaction_hour'].values
-            unusual_ratio = float(np.isin(hours, list(NIGHT_HOURS)).mean()) if len(hours) > 0 else 0.0
+        # Monthly CV
+        txn_valid['year_month'] = txn_valid['transaction_date'].dt.to_period('M')
+        monthly_counts = txn_valid.groupby(['account_id', 'year_month']).size().unstack(fill_value=0)
+        monthly_mean = monthly_counts.mean(axis=1)
+        monthly_std = monthly_counts.std(axis=1)
+        cv = (monthly_std / monthly_mean.clip(lower=0.01)).reindex(all_accounts, fill_value=0)
+        result['monthly_txn_cv'] = cv
 
-            weekend_ratio = float(grp['is_weekend'].mean()) if len(grp) > 0 else 0.0
-            night_weekend = unusual_ratio * weekend_ratio
+        # Days to first txn from account opening
+        open_col = None
+        if profile is not None:
+            for col_name in ['account_opening_date', 'account_open_date']:
+                if col_name in profile.columns:
+                    open_col = col_name
+                    break
+        if open_col:
+            open_dates = profile.set_index('account_id')[open_col]
+            open_dates = pd.to_datetime(open_dates, errors='coerce')
+            first_txn = grp['transaction_date'].min().reindex(all_accounts)
+            days_diff = (first_txn - open_dates.reindex(all_accounts)).dt.days
+            result['days_to_first_txn'] = days_diff.fillna(0)
 
-            # Monthly CV
-            monthly_counts = grp.groupby(grp['transaction_date'].dt.to_period('M')).size()
-            if len(monthly_counts) > 1 and monthly_counts.mean() > 0:
-                cv = float(monthly_counts.std() / monthly_counts.mean())
-            else:
-                cv = 0.0
-
-            # Days to first txn from account open date (O(1) lookup)
-            days_to_first = 0.0
-            if acc_id in open_date_map:
-                first_txn = dates.min()
-                days_to_first = float((first_txn - open_date_map[acc_id]).days)
-
-            rows[acc_id] = {
-                'dormancy_days': dormancy,
-                'max_gap_days': max_gap,
-                'burst_after_dormancy': burst,
-                'unusual_hour_ratio': unusual_ratio,
-                'weekend_ratio': weekend_ratio,
-                'night_weekend_combo': night_weekend,
-                'monthly_txn_cv': cv,
-                'days_to_first_txn': days_to_first,
-            }
-
-        zero_row = {feat: 0.0 for feat in self.get_feature_names()}
-        records = [rows.get(acc, zero_row) for acc in all_accounts]
-        result = pd.DataFrame(records, index=all_accounts)
-        result.index.name = 'account_id'
-
+        result = result.fillna(0).replace([np.inf, -np.inf], 0)
         self.validate_output(result)
         return result

@@ -1,8 +1,7 @@
-"""Base class for all feature generators."""
-from __future__ import annotations
-
-import pandas as pd
 from abc import ABC, abstractmethod
+import pandas as pd
+import warnings
+from typing import Optional
 
 
 class BaseFeatureGenerator(ABC):
@@ -11,23 +10,24 @@ class BaseFeatureGenerator(ABC):
         self.group = group
 
     @abstractmethod
-    def get_feature_names(self) -> list[str]:
-        """Return list of feature names this generator produces."""
-        ...
+    def compute(self, txn: pd.DataFrame, profile: pd.DataFrame,
+                cutoff_date: Optional[pd.Timestamp] = None) -> pd.DataFrame:
+        pass
 
     @abstractmethod
-    def compute(self, txn: pd.DataFrame, profile: pd.DataFrame, cutoff_date=None, **kwargs) -> pd.DataFrame:
-        """Compute features and return DataFrame indexed by account_id."""
-        ...
+    def get_feature_names(self) -> list[str]:
+        pass
 
-    def validate_output(self, result: pd.DataFrame) -> None:
-        """Validate that output has correct columns and index name."""
-        assert result.index.name == 'account_id', f"Index name must be 'account_id', got '{result.index.name}'"
+    def get_feature_descriptions(self) -> dict[str, str]:
+        return {}
+
+    def validate_output(self, features: pd.DataFrame) -> bool:
         expected = set(self.get_feature_names())
-        actual = set(result.columns)
+        actual = set(features.columns)
         missing = expected - actual
-        extra = actual - expected
         if missing:
-            raise ValueError(f"[{self.name}] Missing features: {missing}")
-        if extra:
-            raise ValueError(f"[{self.name}] Unexpected extra features: {extra}")
+            raise ValueError(f"{self.name}: Missing features: {missing}")
+        if features.isin([float("inf"), float("-inf")]).any().any():
+            warnings.warn(f"{self.name}: Replacing infinite values with 0")
+            features.replace([float("inf"), float("-inf")], 0, inplace=True)
+        return True

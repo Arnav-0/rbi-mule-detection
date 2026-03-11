@@ -1,63 +1,50 @@
+import pytest
 import pandas as pd
 from pathlib import Path
-
 from src.data.loader import load_transactions, load_static_tables
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
 
-def test_load_transactions_returns_dataframe():
-    df = load_transactions(data_dir=FIXTURES_DIR)
-    # fixture has 5 rows; may be empty if file naming doesn't match part_0..5
-    # The loader looks for transactions_part_0.csv through part_5.csv
-    # Our fixture is named differently, so we test empty graceful case
+@pytest.fixture
+def fixture_dir(tmp_path):
+    import shutil
+    csv = FIXTURES_DIR / "sample_transactions.csv"
+    for i in range(6):
+        shutil.copy(csv, tmp_path / f"transactions_part_{i}.csv")
+    return tmp_path
+
+
+@pytest.mark.unit
+def test_load_transactions_returns_dataframe(fixture_dir):
+    df = load_transactions(data_dir=fixture_dir)
     assert isinstance(df, pd.DataFrame)
+    assert len(df) > 0
 
 
-def test_load_transactions_from_fixture(tmp_path):
-    """Copy fixture as transactions_part_0.csv and load it."""
-    src = FIXTURES_DIR / "sample_transactions.csv"
-    dst = tmp_path / "transactions_part_0.csv"
-    dst.write_text(src.read_text())
-
-    df = load_transactions(data_dir=tmp_path)
-    assert isinstance(df, pd.DataFrame)
-    assert len(df) == 5
+@pytest.mark.unit
+def test_load_transactions_sorted(fixture_dir):
+    df = load_transactions(data_dir=fixture_dir)
+    for i in range(len(df) - 1):
+        assert df.iloc[i]["account_id"] <= df.iloc[i + 1]["account_id"]
 
 
-def test_load_transactions_sorted(tmp_path):
-    src = FIXTURES_DIR / "sample_transactions.csv"
-    dst = tmp_path / "transactions_part_0.csv"
-    dst.write_text(src.read_text())
-
-    df = load_transactions(data_dir=tmp_path)
-    if len(df) > 1:
-        for acc in df["account_id"].unique():
-            acc_df = df[df["account_id"] == acc]
-            dates = acc_df["transaction_date"].values
-            assert all(dates[i] <= dates[i + 1] for i in range(len(dates) - 1))
+@pytest.mark.unit
+def test_load_transactions_correct_dtypes(fixture_dir):
+    df = load_transactions(data_dir=fixture_dir)
+    assert df["transaction_amount"].dtype.name == "float32"
+    assert df["is_credit"].dtype.name == "int8"
 
 
-def test_load_transactions_correct_dtypes(tmp_path):
-    src = FIXTURES_DIR / "sample_transactions.csv"
-    dst = tmp_path / "transactions_part_0.csv"
-    dst.write_text(src.read_text())
-
-    df = load_transactions(data_dir=tmp_path)
-    if len(df) > 0:
-        assert df["transaction_amount"].dtype == "float32"
-        assert str(df["transaction_type"].dtype) == "category"
+@pytest.mark.unit
+def test_load_static_tables_returns_dict(tmp_path):
+    tables = load_static_tables(data_dir=tmp_path)
+    assert isinstance(tables, dict)
+    assert set(tables.keys()) == {"customers", "accounts", "linkage", "products", "labels", "test_ids"}
 
 
-def test_load_static_tables_returns_dict():
-    result = load_static_tables(data_dir=FIXTURES_DIR)
-    expected_keys = {"customers", "accounts", "linkage", "products", "labels", "test_ids"}
-    assert set(result.keys()) == expected_keys
-
-
+@pytest.mark.unit
 def test_missing_file_handled_gracefully(tmp_path):
-    """Loading from empty directory should not crash."""
-    result = load_transactions(data_dir=tmp_path)
-    assert isinstance(result, pd.DataFrame)
-    static = load_static_tables(data_dir=tmp_path)
-    assert all(v is None for v in static.values())
+    df = load_transactions(data_dir=tmp_path)
+    assert isinstance(df, pd.DataFrame)
+    assert len(df) == 0

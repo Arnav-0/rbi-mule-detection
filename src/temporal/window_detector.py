@@ -1,140 +1,133 @@
-"""Suspicious time window detector using z-score anomaly detection."""
-from __future__ import annotations
-
-import logging
-from typing import Optional
-
+import numpy as np
 import pandas as pd
-
-logger = logging.getLogger(__name__)
+from datetime import timedelta
 
 
 class SuspiciousWindowDetector:
-    def __init__(
-        self,
-        z_threshold: float = 2.0,
-        min_window_days: int = 7,
-        extend_days: int = 7,
-        rolling_window: int = 90,
-    ):
+    def __init__(self, z_threshold=2.0, min_window_days=7, extend_days=7):
         self.z_threshold = z_threshold
         self.min_window_days = min_window_days
         self.extend_days = extend_days
-        self.rolling_window = rolling_window
 
-    def detect(self, txn: pd.DataFrame, account_id: str) -> Optional[dict]:
-        """Detect the most anomalous contiguous time window for one account.
-
-        Returns dict with suspicious_start, suspicious_end, peak_z_score, anomalous_days.
-        Returns None if no anomalous window found.
-        """
-        acc_txn = txn[txn["account_id"] == account_id].copy()
-        if acc_txn.empty:
+    def detect(self, txn, account_id):
+        # Filter transactions for this account
+        acct_txn = txn[txn['account_id'] == account_id].copy()
+        if len(acct_txn) == 0:
             return None
 
-        acc_txn["date"] = pd.to_datetime(acc_txn["timestamp"]).dt.normalize()
-        daily = acc_txn.groupby("date")["amount"].sum().rename("daily_amount")
+        # Support multiple column name conventions
+        date_col = next((c for c in ['transaction_date', 'date', 'timestamp'] if c in acct_txn.columns), None)
+        amt_col = next((c for c in ['transaction_amount', 'amount'] if c in acct_txn.columns), None)
+        if date_col is None or amt_col is None:
+            return None
+        acct_txn['date'] = pd.to_datetime(acct_txn[date_col]).dt.date
 
-        date_range = pd.date_range(daily.index.min(), daily.index.max(), freq="D")
-        daily = daily.reindex(date_range, fill_value=0.0)
+        # Daily aggregates
+        daily = acct_txn.groupby('date').agg(
+            total_amount=(amt_col, 'sum'),
+            txn_count=(amt_col, 'count')
+        ).reset_index()
+        daily['date'] = pd.to_datetime(daily['date'])
 
-        if len(daily) < self.rolling_window + 1:
-            rolling_mean = daily.expanding(min_periods=1).mean()
-            rolling_std = daily.expanding(min_periods=1).std().fillna(1.0)
-        else:
-            rolling_mean = daily.rolling(self.rolling_window, min_periods=1).mean()
-            rolling_std = daily.rolling(self.rolling_window, min_periods=1).std().fillna(1.0)
+        # Fill missing days with 0
+        date_range = pd.date_range(daily['date'].min(), daily['date'].max(), freq='D')
+        daily = daily.set_index('date').reindex(date_range, fill_value=0).reset_index()
+        daily.rename(columns={'index': 'date'}, inplace=True)
 
-        rolling_std = rolling_std.replace(0.0, 1.0)
-        z_scores = (daily - rolling_mean) / rolling_std
-
-        above = z_scores >= self.z_threshold
-        if not above.any():
+        if len(daily) < 14:  # Need enough data for rolling stats
             return None
 
-        # Find contiguous anomalous periods
-        periods = []
-        in_period = False
-        start_idx = None
-        for i, (date, flag) in enumerate(above.items()):
-            if flag and not in_period:
-                in_period = True
-                start_idx = i
-            elif not flag and in_period:
-                in_period = False
-                periods.append((start_idx, i - 1))
-        if in_period:
-            periods.append((start_idx, len(above) - 1))
+        # 90-day rolling mean and std of daily volume
+        window = min(90, len(daily) - 1)
+        daily['rolling_mean'] = daily['total_amount'].rolling(window=window, min_periods=7).mean()
+        daily['rolling_std'] = daily['total_amount'].rolling(window=window, min_periods=7).std()
 
-        if not periods:
-            return None
-
-        # Select period with highest total anomalous days × peak z-score
-        best_period = max(
-            periods,
-            key=lambda p: (p[1] - p[0] + 1) * z_scores.iloc[p[0]:p[1] + 1].max(),
+        # Z-score each day
+        daily['z_score'] = np.where(
+            daily['rolling_std'] > 0,
+            (daily['total_amount'] - daily['rolling_mean']) / daily['rolling_std'],
+            0
         )
 
-        dates = daily.index
-        raw_start = dates[best_period[0]]
-        raw_end = dates[best_period[1]]
-        peak_z = float(z_scores.iloc[best_period[0]:best_period[1] + 1].max())
-        anomalous_days = best_period[1] - best_period[0] + 1
+        # Find contiguous periods where z_score > threshold
+        daily['anomalous'] = daily['z_score'] > self.z_threshold
+        daily['group'] = (~daily['anomalous']).cumsum()
 
-        if anomalous_days < self.min_window_days:
+        anomalous_periods = []
+        for group_id, group_df in daily[daily['anomalous']].groupby('group'):
+            if len(group_df) >= 1:  # At least 1 anomalous day
+                anomalous_periods.append({
+                    'start': group_df['date'].min(),
+                    'end': group_df['date'].max(),
+                    'days': len(group_df),
+                    'peak_z': group_df['z_score'].max(),
+                })
+
+        if not anomalous_periods:
             return None
 
-        # Extend window by extend_days each side, clip to actual date range
-        ext_start = max(raw_start - pd.Timedelta(days=self.extend_days), dates[0])
-        ext_end = min(raw_end + pd.Timedelta(days=self.extend_days), dates[-1])
+        # Select longest anomalous period
+        best = max(anomalous_periods, key=lambda x: x['days'])
+
+        # Extend by extend_days each side, clip to actual date range
+        actual_min = daily['date'].min()
+        actual_max = daily['date'].max()
+
+        suspicious_start = max(best['start'] - timedelta(days=self.extend_days), actual_min)
+        suspicious_end = min(best['end'] + timedelta(days=self.extend_days), actual_max)
+
+        # Ensure minimum window
+        window_days = (suspicious_end - suspicious_start).days
+        if window_days < self.min_window_days:
+            extra = self.min_window_days - window_days
+            suspicious_start = max(suspicious_start - timedelta(days=extra // 2), actual_min)
+            suspicious_end = min(suspicious_end + timedelta(days=(extra + 1) // 2), actual_max)
 
         return {
-            "account_id": account_id,
-            "suspicious_start": ext_start.isoformat(),
-            "suspicious_end": ext_end.isoformat(),
-            "peak_z_score": round(peak_z, 4),
-            "anomalous_days": anomalous_days,
+            'account_id': account_id,
+            'suspicious_start': suspicious_start.isoformat(),
+            'suspicious_end': suspicious_end.isoformat(),
+            'peak_z_score': float(best['peak_z']),
+            'anomalous_days': int(best['days']),
         }
 
-    def detect_all(self, txn: pd.DataFrame, account_ids: list[str]) -> pd.DataFrame:
-        """Batch detection across multiple accounts."""
-        rows = []
-        for account_id in account_ids:
-            result = self.detect(txn, account_id)
+    def detect_all(self, txn, account_ids):
+        # Pre-filter transactions for target accounts for speed
+        target_set = set(account_ids)
+        txn_filtered = txn[txn['account_id'].isin(target_set)]
+        results = []
+        total = len(account_ids)
+        for i, acct_id in enumerate(account_ids):
+            if i % 500 == 0:
+                print(f"  Window detection: {i}/{total}")
+            result = self.detect(txn_filtered, acct_id)
             if result is not None:
-                rows.append(result)
-            else:
-                rows.append({
-                    "account_id": account_id,
-                    "suspicious_start": None,
-                    "suspicious_end": None,
-                    "peak_z_score": None,
-                    "anomalous_days": 0,
-                })
-        return pd.DataFrame(rows)
+                results.append(result)
+        print(f"  Window detection: {total}/{total} done")
+        if not results:
+            return pd.DataFrame(columns=['account_id', 'suspicious_start', 'suspicious_end', 'peak_z_score', 'anomalous_days'])
+        return pd.DataFrame(results)
 
     @staticmethod
-    def compute_temporal_iou(
-        pred_start: str,
-        pred_end: str,
-        true_start: str,
-        true_end: str,
-    ) -> float:
-        """Compute Intersection over Union for two time windows (ISO date strings)."""
-        ps = pd.Timestamp(pred_start)
-        pe = pd.Timestamp(pred_end)
-        ts = pd.Timestamp(true_start)
-        te = pd.Timestamp(true_end)
+    def compute_temporal_iou(pred_start, pred_end, true_start, true_end):
+        pred_start = pd.Timestamp(pred_start)
+        pred_end = pd.Timestamp(pred_end)
+        true_start = pd.Timestamp(true_start)
+        true_end = pd.Timestamp(true_end)
 
-        intersection_start = max(ps, ts)
-        intersection_end = min(pe, te)
+        intersection_start = max(pred_start, true_start)
+        intersection_end = min(pred_end, true_end)
 
-        if intersection_end < intersection_start:
+        if intersection_start >= intersection_end:
             return 0.0
 
-        intersection_days = (intersection_end - intersection_start).days + 1
-        union_start = min(ps, ts)
-        union_end = max(pe, te)
-        union_days = (union_end - union_start).days + 1
+        intersection = (intersection_end - intersection_start).total_seconds()
 
-        return intersection_days / union_days if union_days > 0 else 0.0
+        pred_duration = (pred_end - pred_start).total_seconds()
+        true_duration = (true_end - true_start).total_seconds()
+        union = pred_duration + true_duration - intersection
+
+        if union <= 0:
+            return 0.0
+
+        return intersection / union

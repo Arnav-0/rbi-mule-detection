@@ -1,11 +1,7 @@
-"""Base class for all model wrappers."""
-from __future__ import annotations
-
 from abc import ABC, abstractmethod
-from pathlib import Path
-
-import joblib
 import numpy as np
+import joblib
+from pathlib import Path
 
 
 class BaseModelWrapper(ABC):
@@ -17,12 +13,10 @@ class BaseModelWrapper(ABC):
 
     @abstractmethod
     def get_optuna_params(self, trial) -> dict:
-        """Return hyperparameter dict sampled by Optuna trial."""
         ...
 
     @abstractmethod
     def build_model(self, params: dict):
-        """Instantiate and assign self.model from params dict."""
         ...
 
     def fit(self, X_train, y_train, X_val=None, y_val=None, **kwargs):
@@ -30,13 +24,11 @@ class BaseModelWrapper(ABC):
         self.is_fitted = True
 
     def predict_proba(self, X) -> np.ndarray:
-        if hasattr(self.model, "predict_proba"):
+        if hasattr(self.model, 'predict_proba'):
             return self.model.predict_proba(X)[:, 1]
         return self.model.predict(X)
 
     def save(self, path: Path):
-        path = Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
         joblib.dump(self.model, path)
 
     def load(self, path: Path):

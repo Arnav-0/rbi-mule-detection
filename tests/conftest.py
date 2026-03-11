@@ -1,7 +1,6 @@
+import pytest
 import numpy as np
 import pandas as pd
-import pytest
-
 from src.features.registry import get_all_feature_names
 
 
@@ -32,13 +31,13 @@ def sample_transactions():
 def sample_profile():
     return pd.DataFrame({
         "account_id": ["ACC_001", "ACC_002", "ACC_003", "ACC_004", "ACC_005"],
-        "customer_id": ["CUST_001", "CUST_002", "CUST_003", "CUST_004", "CUST_005"],
+        "customer_id": ["CUST_A", "CUST_B", "CUST_C", "CUST_D", "CUST_E"],
         "account_type": ["savings", "current", "savings", "current", "savings"],
-        "account_age_days": [365, 730, 90, 500, 1200],
-        "declared_income": [500000, 1200000, 200000, 800000, 300000],
-        "current_balance": [50000, 200000, 10000, 150000, 30000],
-        "is_new_account": [0, 0, 1, 0, 0],
-        "dataset": ["train", "train", "train", "test", "unlabeled"],
+        "account_age_days": [365, 730, 90, 500, 45],
+        "declared_income": [500000, 1200000, 300000, 800000, 250000],
+        "current_balance": [50000, 200000, 15000, 120000, 8000],
+        "is_new_account": [0, 0, 1, 0, 1],
+        "dataset": ["train", "train", "train", "test", "test"],
     })
 
 
@@ -53,10 +52,10 @@ def sample_labels():
 @pytest.fixture
 def sample_features():
     np.random.seed(42)
-    n = 100
-    account_ids = [f"ACC_{i:04d}" for i in range(n)]
     feature_names = get_all_feature_names()
-    data = np.random.rand(n, len(feature_names)).astype("float32")
-    df = pd.DataFrame(data, index=account_ids, columns=feature_names)
-    df.index.name = "account_id"
+    n_accounts = 100
+    data = {feat: np.random.randn(n_accounts).astype("float32") for feat in feature_names}
+    data["account_id"] = [f"ACC_{i:04d}" for i in range(n_accounts)]
+    df = pd.DataFrame(data)
+    df.set_index("account_id", inplace=True)
     return df

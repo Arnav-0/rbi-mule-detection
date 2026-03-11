@@ -9,7 +9,7 @@ CSS_PATH = Path(__file__).resolve().parents[1] / "assets" / "style.css"
 
 def inject_css():
     if CSS_PATH.exists():
-        st.markdown(f"<style>{CSS_PATH.read_text()}</style>", unsafe_allow_html=True)
+        st.markdown(f"<style>{CSS_PATH.read_text(encoding='utf-8')}</style>", unsafe_allow_html=True)
 
 
 def page_header(title: str, subtitle: str = ""):

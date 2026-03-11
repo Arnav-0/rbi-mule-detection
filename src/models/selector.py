@@ -1,57 +1,135 @@
-"""Model selection utilities."""
-from __future__ import annotations
+"""Model selection and statistical comparison utilities."""
+
+import logging
+from typing import Dict, Any, Optional
 
 import numpy as np
 import pandas as pd
+from sklearn.model_selection import StratifiedKFold
+from sklearn.metrics import roc_auc_score
 from scipy.stats import wilcoxon
+
+from src.models.base import BaseModelWrapper
+
+logger = logging.getLogger(__name__)
 
 
 class ModelSelector:
-    def select_best(self, results: dict, metric: str = "auc_roc") -> tuple[str, dict]:
-        """Return (name, result_dict) for the model with highest metric."""
-        best_name = max(
-            results,
-            key=lambda n: results[n].get("metrics", {}).get(metric, -np.inf),
-        )
-        return best_name, results[best_name]
+    """Select the best model and perform pairwise statistical comparisons."""
 
-    def statistical_comparison(self, results: dict) -> pd.DataFrame:
-        """Pairwise Wilcoxon signed-rank test on CV AUC scores.
+    @staticmethod
+    def select_best(
+        results: Dict[str, Dict[str, Any]],
+        metric: str = "auc_roc",
+    ) -> str:
+        """Return the name of the model with the highest *metric*.
 
-        Returns a DataFrame of p-values (rows vs. columns).
+        *results* maps model names to dicts containing at least a
+        ``metrics`` sub-dict (output of :class:`ModelEvaluator.evaluate`)
+        or a top-level ``best_score`` key when coming straight from the
+        trainer.
         """
-        names = [n for n in results if "cv_scores" in results[n]]
-        if len(names) < 2:
-            return pd.DataFrame()
+        best_name: Optional[str] = None
+        best_value = -np.inf
 
-        pvals = pd.DataFrame(
-            np.ones((len(names), len(names))), index=names, columns=names
-        )
-        for i, n1 in enumerate(names):
-            for j, n2 in enumerate(names):
-                if i >= j:
-                    continue
-                s1 = np.asarray(results[n1]["cv_scores"])
-                s2 = np.asarray(results[n2]["cv_scores"])
-                if np.allclose(s1, s2):
-                    pval = 1.0
-                else:
-                    _, pval = wilcoxon(s1, s2)
-                pvals.loc[n1, n2] = pval
-                pvals.loc[n2, n1] = pval
-        return pvals
-
-    def rank_models(self, results: dict, metrics: list[str] | None = None) -> pd.DataFrame:
-        """Rank models by multiple metrics; lower rank = better."""
-        if metrics is None:
-            metrics = ["auc_roc", "auc_pr", "f1"]
-
-        rows = {}
         for name, res in results.items():
-            m = res.get("metrics", {})
-            rows[name] = {k: m.get(k, np.nan) for k in metrics}
+            # Support both trainer output (best_score) and evaluator output
+            if "metrics" in res and metric in res["metrics"]:
+                value = res["metrics"][metric]
+            elif metric == "auc_roc" and "best_score" in res:
+                value = res["best_score"]
+            elif metric in res:
+                value = res[metric]
+            else:
+                logger.warning(
+                    "Metric '%s' not found for model '%s'; skipping.",
+                    metric,
+                    name,
+                )
+                continue
 
-        df = pd.DataFrame(rows).T
-        rank_df = df.rank(ascending=False)
-        rank_df["mean_rank"] = rank_df.mean(axis=1)
-        return rank_df.sort_values("mean_rank")
+            if value > best_value:
+                best_value = value
+                best_name = name
+
+        logger.info(
+            "Best model by %s: %s (%.4f)", metric, best_name, best_value
+        )
+        return best_name
+
+    @staticmethod
+    def statistical_comparison(
+        results: Dict[str, Dict[str, Any]],
+        X: np.ndarray,
+        y: np.ndarray,
+        cv: int = 5,
+    ) -> pd.DataFrame:
+        """Pairwise Wilcoxon signed-rank tests on cross-validated AUC-ROC.
+
+        Parameters
+        ----------
+        results : dict
+            Maps model names to dicts with a ``model`` key holding a
+            :class:`BaseModelWrapper` instance.
+        X, y : array-like
+            Full dataset used for cross-validation scoring.
+        cv : int
+            Number of stratified folds.
+
+        Returns
+        -------
+        pd.DataFrame
+            Symmetric matrix of p-values from pairwise Wilcoxon tests.
+        """
+        skf = StratifiedKFold(n_splits=cv, shuffle=True, random_state=42)
+
+        # Collect per-fold AUC-ROC for each model ----------------------------
+        model_scores: Dict[str, np.ndarray] = {}
+        model_names = [
+            name
+            for name, res in results.items()
+            if "model" in res and isinstance(res["model"], BaseModelWrapper)
+        ]
+
+        for name in model_names:
+            wrapper: BaseModelWrapper = results[name]["model"]
+            fold_scores = []
+            for train_idx, val_idx in skf.split(X, y):
+                X_tr, X_va = X[train_idx], X[val_idx]
+                y_tr, y_va = y[train_idx], y[val_idx]
+
+                # Clone and retrain for unbiased CV estimate
+                params = results[name].get("best_params", {})
+                wrapper.build_model(params)
+                wrapper.fit(X_tr, y_tr)
+                y_prob = wrapper.predict_proba(X_va)
+                fold_scores.append(roc_auc_score(y_va, y_prob))
+
+            model_scores[name] = np.array(fold_scores)
+            logger.info(
+                "%s CV AUC-ROC: %.4f +/- %.4f",
+                name,
+                np.mean(fold_scores),
+                np.std(fold_scores),
+            )
+
+        # Pairwise Wilcoxon tests --------------------------------------------
+        n = len(model_names)
+        pvalue_matrix = np.ones((n, n))
+
+        for i in range(n):
+            for j in range(i + 1, n):
+                scores_i = model_scores[model_names[i]]
+                scores_j = model_scores[model_names[j]]
+                try:
+                    _, pval = wilcoxon(scores_i, scores_j)
+                except ValueError:
+                    # Identical distributions or too few samples
+                    pval = 1.0
+                pvalue_matrix[i, j] = pval
+                pvalue_matrix[j, i] = pval
+
+        df = pd.DataFrame(
+            pvalue_matrix, index=model_names, columns=model_names
+        )
+        return df

@@ -1,7 +1,5 @@
-"""Group 8: Interaction features (5 features) — compound cross-group signals."""
-from __future__ import annotations
-
 import pandas as pd
+
 from src.features.base import BaseFeatureGenerator
 
 
@@ -11,45 +9,59 @@ class InteractionFeatureGenerator(BaseFeatureGenerator):
 
     def get_feature_names(self) -> list[str]:
         return [
-            'dormancy_x_burst',
-            'round_x_structuring',
-            'fanin_x_passthrough_speed',
-            'new_account_x_high_value',
+            'dormancy_x_burst', 'round_x_structuring',
+            'fanin_x_passthrough_speed', 'new_account_x_high_value',
             'velocity_x_centrality',
         ]
 
-    def compute(self, txn: pd.DataFrame, profile: pd.DataFrame, cutoff_date=None, **kwargs) -> pd.DataFrame:
-        raise NotImplementedError("Use compute_from_features() for interaction features.")
+    def _safe_col(self, df, col):
+        return df[col] if col in df.columns else 0
 
-    def compute_from_features(self, all_features: pd.DataFrame, profile: pd.DataFrame = None) -> pd.DataFrame:
-        """Compute interaction features from the complete feature matrix."""
-        def _col(name: str) -> pd.Series:
-            if name in all_features.columns:
-                return all_features[name].fillna(0)
-            return pd.Series(0.0, index=all_features.index)
-
+    def compute_from_features(self, all_features, profile=None):
         result = pd.DataFrame(index=all_features.index)
         result.index.name = 'account_id'
 
-        result['dormancy_x_burst'] = _col('dormancy_days') * _col('txn_count_7d')
-
-        result['round_x_structuring'] = _col('round_amount_ratio') * _col('structuring_score')
-
-        result['fanin_x_passthrough_speed'] = (
-            _col('fan_in_ratio')
-            * (1.0 / _col('credit_debit_time_delta_median').clip(lower=0.1))
+        result['dormancy_x_burst'] = (
+            self._safe_col(all_features, 'dormancy_days') *
+            self._safe_col(all_features, 'txn_count_7d')
+        )
+        result['round_x_structuring'] = (
+            self._safe_col(all_features, 'round_amount_ratio') *
+            self._safe_col(all_features, 'structuring_score')
         )
 
-        # is_new_account: derive from account_age_days if available, else 0
-        if 'account_age_days' in (profile.columns if profile is not None else []):
-            prof_indexed = profile.set_index('account_id') if 'account_id' in profile.columns else profile
-            age = prof_indexed['account_age_days'].reindex(all_features.index, fill_value=365)
-            is_new = (age <= 180).astype(float)
+        median_delta = self._safe_col(all_features, 'credit_debit_time_delta_median')
+        if isinstance(median_delta, (int, float)):
+            inv_speed = 1 / max(median_delta, 0.1)
         else:
-            is_new = pd.Series(0.0, index=all_features.index)
+            inv_speed = 1 / median_delta.clip(lower=0.1)
+        result['fanin_x_passthrough_speed'] = (
+            self._safe_col(all_features, 'fan_in_ratio') * inv_speed
+        )
 
-        result['new_account_x_high_value'] = is_new * _col('pct_above_10k')
+        # is_new_account: account opened within 90 days of cutoff
+        is_new = 0
+        if profile is not None and 'account_id' in profile.columns:
+            if 'account_opening_date' in profile.columns:
+                prof_temp = profile.set_index('account_id')
+                open_dates = pd.to_datetime(prof_temp['account_opening_date'], errors='coerce')
+                age_days = (pd.Timestamp('2025-06-30') - open_dates).dt.days.fillna(365)
+                is_new = (age_days.reindex(all_features.index, fill_value=365) < 90).astype(float)
+            elif 'account_age_days' in profile.columns:
+                age_map = profile.set_index('account_id')['account_age_days']
+                is_new = (age_map.reindex(all_features.index, fill_value=365) < 90).astype(float)
+        result['new_account_x_high_value'] = (
+            is_new * self._safe_col(all_features, 'pct_above_10k')
+        )
 
-        result['velocity_x_centrality'] = _col('velocity_acceleration') * _col('betweenness_centrality')
+        result['velocity_x_centrality'] = (
+            self._safe_col(all_features, 'velocity_acceleration') *
+            self._safe_col(all_features, 'betweenness_centrality')
+        )
 
+        result = result.fillna(0)
+        self.validate_output(result)
         return result
+
+    def compute(self, txn=None, profile=None, cutoff_date=None, **kwargs):
+        raise NotImplementedError("Use compute_from_features() instead")

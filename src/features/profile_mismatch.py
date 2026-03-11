@@ -1,7 +1,6 @@
-"""Group 6: Profile mismatch features (5 features) — transaction vs declared profile."""
-from __future__ import annotations
-
+import numpy as np
 import pandas as pd
+
 from src.features.base import BaseFeatureGenerator
 
 
@@ -15,73 +14,62 @@ class ProfileMismatchFeatureGenerator(BaseFeatureGenerator):
             'avg_txn_vs_balance', 'product_txn_mismatch', 'balance_volatility',
         ]
 
-    def compute(self, txn: pd.DataFrame, profile: pd.DataFrame, cutoff_date=None,
-                velocity_features: pd.DataFrame = None, **kwargs) -> pd.DataFrame:
+    def compute(self, txn, profile=None, cutoff_date=None, **kwargs):
+        velocity_features = kwargs.get('velocity_features')
         if cutoff_date is None:
             cutoff_date = pd.Timestamp('2025-06-30')
+        cutoff_date = pd.Timestamp(cutoff_date)
 
         txn = txn.copy()
         txn['transaction_date'] = pd.to_datetime(txn['transaction_date'])
-        txn_valid = txn[txn['transaction_date'] <= cutoff_date].copy()
+        txn_valid = txn[txn['transaction_date'] <= cutoff_date]
 
-        if profile is not None and len(profile) > 0:
-            all_accounts = profile['account_id'].unique()
-        else:
-            all_accounts = txn_valid['account_id'].unique()
+        all_accounts = (
+            profile['account_id'].unique() if profile is not None and 'account_id' in profile.columns
+            else txn_valid['account_id'].unique()
+        )
+        result = pd.DataFrame(0.0, index=pd.Index(all_accounts, name='account_id'),
+                              columns=self.get_feature_names())
 
-        # Build profile lookup indexed by account_id
-        if profile is not None and len(profile) > 0:
+        if profile is not None and 'account_id' in profile.columns:
             prof = profile.set_index('account_id')
         else:
-            prof = pd.DataFrame(index=all_accounts)
+            prof = pd.DataFrame(index=pd.Index(all_accounts, name='account_id'))
 
-        # Use velocity features if provided
-        vel = velocity_features if velocity_features is not None else pd.DataFrame(index=all_accounts)
+        # Velocity features (from prior stage)
+        vel = velocity_features if velocity_features is not None else pd.DataFrame(
+            0, index=pd.Index(all_accounts, name='account_id'),
+            columns=['txn_amount_sum_30d', 'txn_count_30d', 'txn_amount_mean_30d']
+        )
 
-        rows = {}
-        # Balance volatility from txn balance_after column
-        if 'balance_after' in txn_valid.columns:
-            txn_valid['_date'] = pd.to_datetime(txn_valid['transaction_date']).dt.date
-            daily_bal = (
-                txn_valid.groupby(['account_id', '_date'])['balance_after']
-                .last()
-            )
-            bal_std = daily_bal.groupby('account_id').std().fillna(0)
-            bal_mean = daily_bal.groupby('account_id').mean().fillna(0)
-            bal_vol = (bal_std / bal_mean.clip(lower=1)).fillna(0)
+        sum_30d = vel['txn_amount_sum_30d'].reindex(all_accounts, fill_value=0)
+        count_30d = vel['txn_count_30d'].reindex(all_accounts, fill_value=0)
+        mean_30d = vel['txn_amount_mean_30d'].reindex(all_accounts, fill_value=0)
+
+        # Balance (use avg_balance)
+        balance = pd.to_numeric(prof['avg_balance'], errors='coerce').reindex(all_accounts, fill_value=0) if 'avg_balance' in prof.columns else pd.Series(0, index=all_accounts)
+
+        # Account age
+        if 'account_opening_date' in prof.columns:
+            open_dates = pd.to_datetime(prof['account_opening_date'], errors='coerce')
+            age_days = (cutoff_date - open_dates).dt.days.fillna(0).reindex(all_accounts, fill_value=0)
         else:
-            bal_vol = pd.Series(0.0, index=all_accounts)
+            age_days = pd.Series(0, index=all_accounts)
 
-        for acc_id in all_accounts:
-            p = prof.loc[acc_id] if acc_id in prof.index else {}
+        # Product family
+        product_family = prof['product_family'].reindex(all_accounts, fill_value='') if 'product_family' in prof.columns else pd.Series('', index=all_accounts)
 
-            income = float(p.get('declared_income', 0) or 0)
-            age_days = float(p.get('account_age_days', 0) or 0)
-            balance = float(p.get('current_balance', 0) or 0)
-            acc_type = str(p.get('account_type', '')) if p is not None else ''
+        result['txn_volume_vs_income'] = sum_30d / balance.abs().clip(lower=1)
+        result['account_age_vs_activity'] = count_30d / age_days.clip(lower=1)
+        result['avg_txn_vs_balance'] = mean_30d / balance.abs().clip(lower=1)
+        result['product_txn_mismatch'] = ((product_family.str.upper() == 'S') & (mean_30d > 50000)).astype(float)
 
-            txn_sum_30 = float(vel['txn_amount_sum_30d'].get(acc_id, 0) if 'txn_amount_sum_30d' in vel.columns else 0)
-            txn_cnt_30 = float(vel['txn_count_30d'].get(acc_id, 0) if 'txn_count_30d' in vel.columns else 0)
-            txn_mean_30 = float(vel['txn_amount_mean_30d'].get(acc_id, 0) if 'txn_amount_mean_30d' in vel.columns else 0)
+        # Balance volatility
+        if 'daily_avg_balance' in prof.columns and 'monthly_avg_balance' in prof.columns:
+            daily = pd.to_numeric(prof['daily_avg_balance'], errors='coerce').fillna(0).reindex(all_accounts, fill_value=0)
+            monthly = pd.to_numeric(prof['monthly_avg_balance'], errors='coerce').fillna(0).reindex(all_accounts, fill_value=0)
+            result['balance_volatility'] = (daily - monthly).abs() / monthly.abs().clip(lower=1)
 
-            vol_vs_income = txn_sum_30 / max(income, 1.0)
-            age_vs_activity = txn_cnt_30 / max(age_days, 1.0)
-            avg_vs_balance = txn_mean_30 / max(balance, 1.0)
-            mismatch = 1.0 if (acc_type.lower() == 'savings' and txn_mean_30 > 50000) else 0.0
-            bvol = float(bal_vol.get(acc_id, 0.0))
-
-            rows[acc_id] = {
-                'txn_volume_vs_income': vol_vs_income,
-                'account_age_vs_activity': age_vs_activity,
-                'avg_txn_vs_balance': avg_vs_balance,
-                'product_txn_mismatch': mismatch,
-                'balance_volatility': bvol,
-            }
-
-        zero_row = {feat: 0.0 for feat in self.get_feature_names()}
-        records = [rows.get(acc, zero_row) for acc in all_accounts]
-        result = pd.DataFrame(records, index=all_accounts)
-        result.index.name = 'account_id'
-
+        result = result.fillna(0).replace([np.inf, -np.inf], 0)
         self.validate_output(result)
         return result

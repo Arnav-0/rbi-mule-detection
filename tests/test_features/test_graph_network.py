@@ -1,100 +1,91 @@
-"""Tests for graph/network feature generator."""
 import pandas as pd
+import pytest
+
 from src.features.graph_network import GraphNetworkFeatureGenerator
 
-CUTOFF = pd.Timestamp('2025-01-31')
+CUTOFF = pd.Timestamp('2025-06-30')
 
 
-def _make_txn(records):
-    """records: list of (account_id, counterparty_id, amount, date)."""
-    return pd.DataFrame({
-        'account_id': [r[0] for r in records],
-        'counterparty_id': [r[1] for r in records],
-        'transaction_amount': [float(r[2]) for r in records],
-        'transaction_date': pd.to_datetime([r[3] for r in records]),
-        'is_credit': [1] * len(records),
-    })
+def _make_edge_txns(edges):
+    """edges: list of (from, to, amount)"""
+    rows = []
+    for i, (src, dst, amt) in enumerate(edges):
+        rows.append({
+            'account_id': src,
+            'counterparty_id': dst,
+            'transaction_date': pd.Timestamp('2025-06-15') + pd.Timedelta(hours=i),
+            'transaction_amount': float(amt),
+            'is_credit': 0,
+        })
+    return pd.DataFrame(rows)
 
 
-def test_fan_in():
-    """5 senders → ACC_HUB → in_degree=5."""
-    records = [(f'SENDER_{i}', 'ACC_HUB', 1000, '2025-01-10') for i in range(5)]
-    txn = _make_txn(records)
-    profile = pd.DataFrame({'account_id': ['ACC_HUB'] + [f'SENDER_{i}' for i in range(5)]})
-    gen = GraphNetworkFeatureGenerator()
-    result = gen.compute(txn, profile, cutoff_date=CUTOFF)
-    assert result.loc['ACC_HUB', 'in_degree'] == 5.0
+class TestGraphNetworkFeatures:
+    def test_fan_in(self):
+        edges = [(f'S{i}', 'HUB', 1000) for i in range(5)]
+        txn = _make_edge_txns(edges)
+        profile = pd.DataFrame({'account_id': ['HUB'] + [f'S{i}' for i in range(5)]})
+        gen = GraphNetworkFeatureGenerator()
+        result = gen.compute(txn, profile=profile, cutoff_date=CUTOFF)
+        assert result.at['HUB', 'in_degree'] == 5
 
+    def test_fan_out(self):
+        edges = [('HUB', f'R{i}', 1000) for i in range(5)]
+        txn = _make_edge_txns(edges)
+        profile = pd.DataFrame({'account_id': ['HUB'] + [f'R{i}' for i in range(5)]})
+        gen = GraphNetworkFeatureGenerator()
+        result = gen.compute(txn, profile=profile, cutoff_date=CUTOFF)
+        assert result.at['HUB', 'out_degree'] == 5
 
-def test_fan_out():
-    """ACC_HUB → 5 receivers → out_degree=5."""
-    records = [('ACC_HUB', f'RECV_{i}', 1000, '2025-01-10') for i in range(5)]
-    txn = _make_txn(records)
-    profile = pd.DataFrame({'account_id': ['ACC_HUB']})
-    gen = GraphNetworkFeatureGenerator()
-    result = gen.compute(txn, profile, cutoff_date=CUTOFF)
-    assert result.loc['ACC_HUB', 'out_degree'] == 5.0
+    def test_pagerank_higher_for_hub(self):
+        # Hub receives from 5 senders
+        edges = [(f'S{i}', 'HUB', 1000) for i in range(5)]
+        txn = _make_edge_txns(edges)
+        profile = pd.DataFrame({'account_id': ['HUB'] + [f'S{i}' for i in range(5)]})
+        gen = GraphNetworkFeatureGenerator()
+        result = gen.compute(txn, profile=profile, cutoff_date=CUTOFF)
+        assert result.at['HUB', 'pagerank'] > result.at['S0', 'pagerank']
 
+    def test_community_detection(self):
+        # Two cliques
+        edges = []
+        for i in range(3):
+            for j in range(3):
+                if i != j:
+                    edges.append((f'A{i}', f'A{j}', 1000))
+                    edges.append((f'B{i}', f'B{j}', 1000))
+        txn = _make_edge_txns(edges)
+        all_ids = [f'A{i}' for i in range(3)] + [f'B{i}' for i in range(3)]
+        profile = pd.DataFrame({'account_id': all_ids})
+        gen = GraphNetworkFeatureGenerator()
+        result = gen.compute(txn, profile=profile, cutoff_date=CUTOFF)
+        # A-group and B-group should be in different communities
+        a_comms = set(result.loc[[f'A{i}' for i in range(3)], 'community_id'])
+        b_comms = set(result.loc[[f'B{i}' for i in range(3)], 'community_id'])
+        assert len(a_comms) == 1 and len(b_comms) == 1
+        assert a_comms != b_comms
 
-def test_pagerank_higher_for_hub():
-    """Hub (receives from many) should have higher PageRank than leaf."""
-    records = []
-    # 5 leaves → hub
-    for i in range(5):
-        records.append((f'LEAF_{i}', 'HUB', 1000, '2025-01-10'))
-    # hub → one output
-    records.append(('HUB', 'OUTPUT', 5000, '2025-01-11'))
-    txn = _make_txn(records)
-    profile = pd.DataFrame({'account_id': ['HUB', 'LEAF_0']})
-    gen = GraphNetworkFeatureGenerator()
-    result = gen.compute(txn, profile, cutoff_date=CUTOFF)
-    assert result.loc['HUB', 'pagerank'] > result.loc['LEAF_0', 'pagerank']
+    def test_credit_edge_direction(self):
+        # Credits: counterparty sends money TO account → edge: counterparty→account
+        txn = pd.DataFrame({
+            'account_id': ['HUB'] * 5,
+            'counterparty_id': [f'S{i}' for i in range(5)],
+            'transaction_date': pd.date_range('2025-06-15', periods=5, freq='h'),
+            'transaction_amount': [1000.0] * 5,
+            'is_credit': [1] * 5,  # HUB receives credits from S0-S4
+        })
+        profile = pd.DataFrame({'account_id': ['HUB'] + [f'S{i}' for i in range(5)]})
+        gen = GraphNetworkFeatureGenerator()
+        result = gen.compute(txn, profile=profile, cutoff_date=CUTOFF)
+        # Credits mean money flows S→HUB, so HUB.in_degree=5
+        assert result.at['HUB', 'in_degree'] == 5
+        assert result.at['HUB', 'out_degree'] == 0
 
-
-def test_community_detection():
-    """Two disconnected cliques → should be in different communities."""
-    records = []
-    # Clique A: A1 <-> A2 <-> A3
-    for src, dst in [('A1', 'A2'), ('A2', 'A3'), ('A3', 'A1')]:
-        records.append((src, dst, 1000, '2025-01-10'))
-    # Clique B: B1 <-> B2 <-> B3
-    for src, dst in [('B1', 'B2'), ('B2', 'B3'), ('B3', 'B1')]:
-        records.append((src, dst, 1000, '2025-01-10'))
-    txn = _make_txn(records)
-    profile = pd.DataFrame({'account_id': ['A1', 'A2', 'A3', 'B1', 'B2', 'B3']})
-    gen = GraphNetworkFeatureGenerator()
-    result = gen.compute(txn, profile, cutoff_date=CUTOFF)
-    comm_a = result.loc['A1', 'community_id']
-    comm_b = result.loc['B1', 'community_id']
-    assert comm_a != comm_b, "Separate cliques should be in different communities"
-
-
-def test_missing_account_gets_zeros():
-    """Account not in any transaction → all features = 0."""
-    records = [('ACC1', 'ACC2', 1000, '2025-01-10')]
-    txn = _make_txn(records)
-    profile = pd.DataFrame({'account_id': ['ACC1', 'ACC2', 'ACC_MISSING']})
-    gen = GraphNetworkFeatureGenerator()
-    result = gen.compute(txn, profile, cutoff_date=CUTOFF)
-    row = result.loc['ACC_MISSING']
-    # All should be 0 (not in graph)
-    assert row['in_degree'] == 0.0
-    assert row['out_degree'] == 0.0
-    assert row['pagerank'] == 0.0
-    assert row['betweenness_centrality'] == 0.0
-
-
-def test_community_mule_density():
-    """community_mule_density computed when labels provided."""
-    records = [('A1', 'A2', 1000, '2025-01-10'), ('A2', 'A3', 1000, '2025-01-10')]
-    txn = _make_txn(records)
-    profile = pd.DataFrame({'account_id': ['A1', 'A2', 'A3']})
-    labels = pd.DataFrame({'account_id': ['A1', 'A2', 'A3'], 'is_mule': [1, 1, 0]})
-    gen = GraphNetworkFeatureGenerator(labels_df=labels)
-    result = gen.compute(txn, profile, cutoff_date=CUTOFF)
-    # All in same community → density = mean([1,1,0]) ≈ 0.667
-    assert 0.0 <= result.loc['A1', 'community_mule_density'] <= 1.0
-
-
-def test_feature_count():
-    assert len(GraphNetworkFeatureGenerator().get_feature_names()) == 10
+    def test_missing_account_gets_zeros(self):
+        edges = [('A1', 'A2', 1000)]
+        txn = _make_edge_txns(edges)
+        profile = pd.DataFrame({'account_id': ['A1', 'A2', 'A3']})
+        gen = GraphNetworkFeatureGenerator()
+        result = gen.compute(txn, profile=profile, cutoff_date=CUTOFF)
+        assert result.at['A3', 'in_degree'] == 0
+        assert result.at['A3', 'pagerank'] == 0

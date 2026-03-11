@@ -1,104 +1,102 @@
-"""Prediction endpoints for mule account scoring."""
-from __future__ import annotations
+"""Prediction endpoints."""
 
+import json
 import logging
+import sqlite3
 
 import numpy as np
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, HTTPException
 
-from src.features.registry import get_all_feature_names
+from src.api.schemas import (
+    PredictRequest, PredictResponse, BatchPredictRequest, BatchPredictResponse
+)
+from src.api.dependencies import get_db, get_model, ModelService
+from src.db import crud
 
 logger = logging.getLogger(__name__)
-
-router = APIRouter()
-
-FEATURE_NAMES = get_all_feature_names()
+router = APIRouter(tags=["predictions"])
 
 
-class PredictionRequest(BaseModel):
-    """Single account prediction request with feature values."""
-    account_id: str = Field(..., description="Unique account identifier")
-    features: dict[str, float] = Field(
-        ...,
-        description="Feature name → value mapping (57 features)",
+def _build_predict_response(account_id: str, probability: float,
+                            threshold: float, model_version: str,
+                            explanation: dict = None) -> PredictResponse:
+    prediction = int(probability >= threshold)
+    label = "MULE" if prediction else "LEGITIMATE"
+    top_features = []
+    nl_text = ""
+    if explanation:
+        top_features = explanation.get("top_features", [])
+        if isinstance(top_features, str):
+            top_features = json.loads(top_features)
+        nl_text = explanation.get("natural_language", "")
+    return PredictResponse(
+        account_id=account_id,
+        probability=round(probability, 6),
+        prediction=prediction,
+        label=label,
+        threshold=threshold,
+        top_features=top_features if isinstance(top_features, list) else [],
+        natural_language=nl_text or "",
+        model_version=model_version,
     )
 
 
-class PredictionResponse(BaseModel):
-    account_id: str
-    mule_probability: float
-    risk_level: str
-    threshold: float = 0.5
-
-
-class BatchPredictionRequest(BaseModel):
-    accounts: list[PredictionRequest]
-
-
-class BatchPredictionResponse(BaseModel):
-    predictions: list[PredictionResponse]
-
-
-def _classify_risk(probability: float) -> str:
-    if probability >= 0.8:
-        return "critical"
-    elif probability >= 0.5:
-        return "high"
-    elif probability >= 0.3:
-        return "medium"
-    return "low"
-
-
-@router.post("/predict", response_model=PredictionResponse)
-async def predict(request: PredictionRequest):
-    """Score a single account for mule probability."""
-    from src.api.main import get_model
-
-    model = get_model()
-    if model is None:
-        raise HTTPException(status_code=503, detail="Model not loaded")
-
-    feature_vector = np.array(
-        [[request.features.get(f, 0.0) for f in FEATURE_NAMES]]
-    )
-
-    if hasattr(model, "predict_proba"):
-        prob = float(model.predict_proba(feature_vector)[:, 1][0])
-    else:
-        prob = float(model.predict(feature_vector)[0])
-
-    return PredictionResponse(
-        account_id=request.account_id,
-        mule_probability=round(prob, 6),
-        risk_level=_classify_risk(prob),
-    )
-
-
-@router.post("/predict/batch", response_model=BatchPredictionResponse)
-async def predict_batch(request: BatchPredictionRequest):
-    """Score multiple accounts in a single request."""
-    from src.api.main import get_model
-
-    model = get_model()
-    if model is None:
-        raise HTTPException(status_code=503, detail="Model not loaded")
-
-    feature_matrix = np.array(
-        [[acct.features.get(f, 0.0) for f in FEATURE_NAMES] for acct in request.accounts]
-    )
-
-    if hasattr(model, "predict_proba"):
-        probs = model.predict_proba(feature_matrix)[:, 1]
-    else:
-        probs = model.predict(feature_matrix)
-
-    predictions = [
-        PredictionResponse(
-            account_id=acct.account_id,
-            mule_probability=round(float(p), 6),
-            risk_level=_classify_risk(float(p)),
+@router.post("/predict", response_model=PredictResponse)
+def predict_single(
+    req: PredictRequest,
+    model: ModelService = Depends(get_model),
+    db: sqlite3.Connection = Depends(get_db),
+):
+    # Check cache first
+    cached = crud.get_prediction(db, req.account_id)
+    if cached:
+        explanation = crud.get_explanation(db, req.account_id)
+        return _build_predict_response(
+            req.account_id, cached["probability"], req.threshold,
+            cached.get("model_version", "v1"), explanation
         )
-        for acct, p in zip(request.accounts, probs)
-    ]
-    return BatchPredictionResponse(predictions=predictions)
+
+    if not model.is_loaded:
+        raise HTTPException(503, "Model not loaded. Run training pipeline first.")
+
+    # Load features from DB
+    feat_row = crud.get_features(db, req.account_id)
+    if not feat_row:
+        raise HTTPException(404, f"No features found for account {req.account_id}")
+
+    features = feat_row["features"]
+    X = np.array([[features.get(f, 0.0) for f in model.feature_names]])
+    probability = float(model.predict_proba(X)[0])
+
+    # Cache prediction
+    prediction = int(probability >= req.threshold)
+    crud.upsert_prediction(db, req.account_id, probability, prediction,
+                           req.threshold, model.model_version)
+
+    explanation = crud.get_explanation(db, req.account_id)
+    return _build_predict_response(
+        req.account_id, probability, req.threshold, model.model_version, explanation
+    )
+
+
+@router.post("/predict/batch", response_model=BatchPredictResponse)
+def predict_batch(
+    req: BatchPredictRequest,
+    model: ModelService = Depends(get_model),
+    db: sqlite3.Connection = Depends(get_db),
+):
+    results = []
+    for aid in req.account_ids:
+        try:
+            single_req = PredictRequest(account_id=aid, threshold=req.threshold)
+            resp = predict_single(single_req, model, db)
+            results.append(resp)
+        except HTTPException:
+            results.append(PredictResponse(
+                account_id=aid, probability=0.0, prediction=0,
+                label="UNKNOWN", threshold=req.threshold,
+                model_version=model.model_version
+            ))
+
+    flagged = sum(1 for r in results if r.prediction == 1)
+    return BatchPredictResponse(predictions=results, total=len(results), flagged=flagged)

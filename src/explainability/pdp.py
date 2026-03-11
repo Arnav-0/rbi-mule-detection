@@ -1,68 +1,49 @@
-"""Partial Dependence Plot analyzer."""
-from __future__ import annotations
-
-import logging
-from pathlib import Path
-
+from sklearn.inspection import partial_dependence
+import matplotlib.pyplot as plt
 import numpy as np
-
-logger = logging.getLogger(__name__)
+from pathlib import Path
 
 
 class PDPAnalyzer:
-    def __init__(self, model, feature_names: list[str]):
+    def __init__(self, model, feature_names):
         self.model = model
         self.feature_names = feature_names
 
-    def compute_pdp(self, X, feature: str, grid_resolution: int = 50) -> dict:
-        """Compute PDP for a single feature."""
-        from sklearn.inspection import partial_dependence
-
-        feature_idx = self.feature_names.index(feature)
+    def compute_pdp(self, X, feature_idx, grid_resolution=50):
         result = partial_dependence(
-            self.model, X, features=[feature_idx], grid_resolution=grid_resolution, kind="average"
+            self.model, X, features=[feature_idx], grid_resolution=grid_resolution
         )
-        return {
-            "feature": feature,
-            "grid_values": result["grid_values"][0].tolist(),
-            "average": result["average"][0].tolist(),
-        }
+        return {'grid': result['grid_values'][0], 'pdp': result['average'][0]}
 
-    def plot_top_features(
-        self,
-        X,
-        top_features: list[str],
-        save_path: str = "outputs/plots/pdp_top_features.png",
-        n_cols: int = 5,
-    ):
-        try:
-            import matplotlib.pyplot as plt
-        except ImportError:
-            logger.warning("matplotlib not available")
-            return
+    def plot_top_features(self, X, top_n=10, save_dir='outputs/plots'):
+        save_dir = Path(save_dir)
+        save_dir.mkdir(parents=True, exist_ok=True)
 
-        n = len(top_features)
-        n_rows = (n + n_cols - 1) // n_cols
-        fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows))
-        axes = np.array(axes).flatten()
+        # Get feature importances to find top features
+        if hasattr(self.model, 'feature_importances_'):
+            importances = self.model.feature_importances_
+        else:
+            importances = np.ones(X.shape[1])
+        top_indices = np.argsort(importances)[::-1][:top_n]
 
-        for idx, feature in enumerate(top_features):
-            try:
-                pdp = self.compute_pdp(X, feature)
-                axes[idx].plot(pdp["grid_values"], pdp["average"])
-                axes[idx].set_title(feature, fontsize=9)
-                axes[idx].set_xlabel("Feature value", fontsize=8)
-                axes[idx].set_ylabel("Predicted probability", fontsize=8)
-            except Exception as exc:
-                logger.warning("PDP failed for %s: %s", feature, exc)
-                axes[idx].set_title(f"{feature} (error)", fontsize=9)
+        rows = 2
+        cols = 5
+        fig, axes = plt.subplots(rows, cols, figsize=(25, 10))
+        axes = axes.flatten()
 
-        for idx in range(n, len(axes)):
-            axes[idx].set_visible(False)
+        for i, feat_idx in enumerate(top_indices):
+            if i >= rows * cols:
+                break
+            result = self.compute_pdp(X, feat_idx)
+            axes[i].plot(result['grid'], result['pdp'])
+            axes[i].set_title(
+                self.feature_names[feat_idx]
+                if feat_idx < len(self.feature_names)
+                else f'Feature {feat_idx}'
+            )
+            axes[i].set_xlabel('Feature Value')
+            axes[i].set_ylabel('Partial Dependence')
 
-        save_path = Path(save_path)
-        save_path.parent.mkdir(parents=True, exist_ok=True)
-        fig.tight_layout()
-        fig.savefig(save_path, dpi=150)
-        plt.close(fig)
-        logger.info("PDP plot saved to %s", save_path)
+        plt.tight_layout()
+        plt.savefig(save_dir / 'pdp_top_features.png', dpi=150, bbox_inches='tight')
+        plt.close()

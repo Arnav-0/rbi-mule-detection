@@ -1,25 +1,8 @@
-"""Group 2: Amount pattern features (8 features) — structuring and round-amount detection."""
-from __future__ import annotations
-
-import warnings
 import numpy as np
 import pandas as pd
-from scipy import stats
+from scipy import stats as scipy_stats
+
 from src.features.base import BaseFeatureGenerator
-
-
-def _gini(arr: np.ndarray) -> float:
-    if arr.sum() == 0 or len(arr) == 0:
-        return 0.0
-    sorted_arr = np.sort(arr)
-    n = len(sorted_arr)
-    index = np.arange(1, n + 1)
-    return (2 * np.sum(index * sorted_arr)) / (n * np.sum(sorted_arr)) - (n + 1) / n
-
-
-def _entropy(amounts: np.ndarray) -> float:
-    counts, _ = np.histogram(amounts, bins=20)
-    return float(stats.entropy(counts + 1e-10))
 
 
 class AmountPatternFeatureGenerator(BaseFeatureGenerator):
@@ -33,66 +16,60 @@ class AmountPatternFeatureGenerator(BaseFeatureGenerator):
             'pct_above_10k', 'amount_concentration',
         ]
 
-    def compute(self, txn: pd.DataFrame, profile: pd.DataFrame, cutoff_date=None, **kwargs) -> pd.DataFrame:
+    def compute(self, txn, profile=None, cutoff_date=None, **kwargs):
         if cutoff_date is None:
             cutoff_date = pd.Timestamp('2025-06-30')
+        cutoff_date = pd.Timestamp(cutoff_date)
 
         txn = txn.copy()
         txn['transaction_date'] = pd.to_datetime(txn['transaction_date'])
-        txn_valid = txn[txn['transaction_date'] <= cutoff_date].copy()
+        txn_valid = txn[txn['transaction_date'] <= cutoff_date]
 
-        if profile is not None and len(profile) > 0:
-            all_accounts = profile['account_id'].unique()
-        else:
-            all_accounts = txn_valid['account_id'].unique()
+        all_accounts = (
+            profile['account_id'].unique() if profile is not None and 'account_id' in profile.columns
+            else txn_valid['account_id'].unique()
+        )
+        result = pd.DataFrame(0.0, index=pd.Index(all_accounts, name='account_id'),
+                              columns=self.get_feature_names())
 
-        grouped = txn_valid.groupby('account_id')
+        amt = txn_valid[['account_id', 'transaction_amount']].copy()
+        amt['is_round'] = ((amt['transaction_amount'] % 1000 == 0) |
+                           (amt['transaction_amount'] % 5000 == 0) |
+                           (amt['transaction_amount'] % 10000 == 0))
+        amt['in_struct'] = (amt['transaction_amount'] >= 45000) & (amt['transaction_amount'] <= 49999)
+        amt['in_struct_broad'] = (amt['transaction_amount'] >= 40000) & (amt['transaction_amount'] <= 49999)
+        amt['above_10k'] = amt['transaction_amount'] > 10000
 
-        def _compute_row(acc_id, amounts):
-            n = len(amounts)
-            if n == 0:
-                return {feat: 0.0 for feat in self.get_feature_names()}
+        grp = amt.groupby('account_id')
+        result['round_amount_ratio'] = grp['is_round'].mean().reindex(all_accounts, fill_value=0)
+        result['structuring_score'] = grp['in_struct'].mean().reindex(all_accounts, fill_value=0)
+        result['structuring_score_broad'] = grp['in_struct_broad'].mean().reindex(all_accounts, fill_value=0)
+        result['pct_above_10k'] = grp['above_10k'].mean().reindex(all_accounts, fill_value=0)
 
-            amt = amounts.values.astype(float)
+        # Vectorized skewness and kurtosis
+        skew_vals = grp['transaction_amount'].skew().reindex(all_accounts, fill_value=0)
+        kurt_vals = grp['transaction_amount'].apply(lambda x: x.kurtosis() if len(x) >= 3 else 0).reindex(all_accounts, fill_value=0)
+        result['amount_skewness'] = skew_vals
+        result['amount_kurtosis'] = kurt_vals
 
-            round_mask = (amt % 1000 == 0) | (amt % 5000 == 0) | (amt % 10000 == 0)
-            round_ratio = round_mask.mean()
+        # Entropy and concentration (Gini) need per-group compute but use apply
+        def _entropy(x):
+            if len(x) < 2:
+                return 0.0
+            hist, _ = np.histogram(x, bins=20)
+            return scipy_stats.entropy(hist + 1e-10)
 
-            struct_mask = (amt >= 45000) & (amt <= 49999)
-            struct_score = struct_mask.mean()
+        def _gini(x):
+            arr = np.sort(np.asarray(x, dtype=float))
+            n = len(arr)
+            if n < 2 or arr.sum() == 0:
+                return 0.0
+            index = np.arange(1, n + 1)
+            return (2 * np.sum(index * arr)) / (n * np.sum(arr)) - (n + 1) / n
 
-            struct_broad_mask = (amt >= 40000) & (amt <= 49999)
-            struct_broad = struct_broad_mask.mean()
+        result['amount_entropy'] = grp['transaction_amount'].apply(_entropy).reindex(all_accounts, fill_value=0)
+        result['amount_concentration'] = grp['transaction_amount'].apply(_gini).reindex(all_accounts, fill_value=0)
 
-            entropy = _entropy(amt)
-            with warnings.catch_warnings():
-                warnings.simplefilter('ignore', RuntimeWarning)
-                skewness = float(stats.skew(amt)) if n >= 3 else 0.0
-                kurtosis = float(stats.kurtosis(amt)) if n >= 3 else 0.0
-            skewness = 0.0 if np.isnan(skewness) else skewness
-            kurtosis = 0.0 if np.isnan(kurtosis) else kurtosis
-            pct_above = (amt > 10000).mean()
-            concentration = _gini(amt)
-
-            return {
-                'round_amount_ratio': round_ratio,
-                'structuring_score': struct_score,
-                'structuring_score_broad': struct_broad,
-                'amount_entropy': entropy,
-                'amount_skewness': skewness,
-                'amount_kurtosis': kurtosis,
-                'pct_above_10k': pct_above,
-                'amount_concentration': concentration,
-            }
-
-        account_data = {}
-        for acc_id, grp in grouped:
-            account_data[acc_id] = _compute_row(acc_id, grp['transaction_amount'])
-
-        zero_row = {feat: 0.0 for feat in self.get_feature_names()}
-        records = [account_data.get(acc, zero_row) for acc in all_accounts]
-        result = pd.DataFrame(records, index=all_accounts)
-        result.index.name = 'account_id'
-
+        result = result.fillna(0)
         self.validate_output(result)
         return result

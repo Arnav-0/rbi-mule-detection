@@ -166,7 +166,7 @@ mid_col1, mid_col2 = st.columns([2, 1])
 with mid_col1:
     section("Monthly Transaction Volume")
     if txn is not None and "transaction_date" in txn.columns:
-        txn_monthly = txn.set_index("transaction_date").resample("ME").size().reset_index()
+        txn_monthly = txn.set_index("transaction_date").resample("M").size().reset_index()
         txn_monthly.columns = ["month", "count"]
 
         fig = go.Figure()

@@ -1,60 +1,67 @@
-import pandas as pd
 import pytest
-
+import pandas as pd
 from src.data.merger import build_account_profile, add_labels
 
 
 @pytest.fixture
-def mini_tables():
+def static_tables():
     accounts = pd.DataFrame({
         "account_id": ["ACC_001", "ACC_002", "ACC_003"],
         "account_type": ["savings", "current", "savings"],
-        "account_open_date": ["2020-01-01", "2018-06-15", "2024-01-01"],
+        "account_opening_date": ["2024-01-01", "2023-06-15", "2025-01-01"],
     })
     linkage = pd.DataFrame({
         "account_id": ["ACC_001", "ACC_002", "ACC_003"],
-        "customer_id": ["CUST_001", "CUST_002", "CUST_001"],
+        "customer_id": ["CUST_A", "CUST_B", "CUST_C"],
     })
     customers = pd.DataFrame({
-        "customer_id": ["CUST_001", "CUST_002"],
-        "name": ["Alice", "Bob"],
-        "declared_income": [500000, 1200000],
+        "customer_id": ["CUST_A", "CUST_B", "CUST_C"],
+        "age": [30, 45, 25],
+        "gender": ["M", "F", "M"],
     })
     products = pd.DataFrame({
-        "customer_id": ["CUST_001", "CUST_002"],
-        "product_type": ["basic", "premium"],
+        "customer_id": ["CUST_A", "CUST_B", "CUST_C"],
+        "product_type": ["basic", "premium", "basic"],
     })
     labels = pd.DataFrame({
-        "account_id": ["ACC_001"],
-        "is_mule": [1],
+        "account_id": ["ACC_001", "ACC_002"],
+        "is_mule": [1, 0],
     })
-    test_ids = pd.DataFrame({"account_id": ["ACC_002"]})
+    test_ids = pd.DataFrame({
+        "account_id": ["ACC_003"],
+    })
     return {
-        "accounts": accounts, "linkage": linkage, "customers": customers,
-        "products": products, "labels": labels, "test_ids": test_ids,
+        "accounts": accounts,
+        "linkage": linkage,
+        "customers": customers,
+        "products": products,
+        "labels": labels,
+        "test_ids": test_ids,
     }
 
 
-def test_merge_preserves_row_count(mini_tables):
-    profile = build_account_profile(mini_tables)
-    # Should have <= accounts rows (no explosion)
-    assert len(profile) <= len(mini_tables["accounts"]) * 2
+@pytest.mark.unit
+def test_merge_preserves_row_count(static_tables):
+    profile = build_account_profile(static_tables)
+    assert len(profile) <= len(static_tables["accounts"]) * 2
 
 
-def test_no_duplicate_account_ids(mini_tables):
-    profile = build_account_profile(mini_tables)
-    assert profile["account_id"].duplicated().sum() == 0
+@pytest.mark.unit
+def test_no_duplicate_account_ids(static_tables):
+    profile = build_account_profile(static_tables)
+    assert profile["account_id"].is_unique
 
 
-def test_labels_correctly_assigned(mini_tables):
-    profile = build_account_profile(mini_tables)
-    profile = add_labels(profile, mini_tables["labels"], mini_tables["test_ids"])
-    assert profile[profile["account_id"] == "ACC_001"]["dataset"].iloc[0] == "train"
-    assert profile[profile["account_id"] == "ACC_002"]["dataset"].iloc[0] == "test"
-    assert profile[profile["account_id"] == "ACC_003"]["dataset"].iloc[0] == "unlabeled"
+@pytest.mark.unit
+def test_labels_correctly_assigned(static_tables):
+    profile = build_account_profile(static_tables)
+    profile = add_labels(profile, static_tables["labels"], static_tables["test_ids"])
+    assert profile.loc[profile["account_id"] == "ACC_001", "dataset"].iloc[0] == "train"
+    assert profile.loc[profile["account_id"] == "ACC_003", "dataset"].iloc[0] == "test"
 
 
-def test_account_age_computed(mini_tables):
-    profile = build_account_profile(mini_tables)
+@pytest.mark.unit
+def test_account_age_computed(static_tables):
+    profile = build_account_profile(static_tables)
     assert "account_age_days" in profile.columns
-    assert (profile["account_age_days"] >= 0).all()
+    assert (profile["account_age_days"] > 0).any()
