@@ -1,13 +1,19 @@
 TRANSACTION_DTYPES = {
     "account_id": "str",
     "transaction_id": "str",
-    "transaction_date": "str",
-    "transaction_amount": "float32",
-    "transaction_type": "category",
+    "transaction_timestamp": "str",
+    "amount": "float32",
+    "txn_type": "category",
     "channel": "category",
     "counterparty_id": "str",
-    "is_credit": "int8",
-    "balance_after": "float32",
+    "mcc_code": "str",
+}
+
+# Column rename mapping: raw CSV -> internal pipeline names
+TRANSACTION_RENAME = {
+    "transaction_timestamp": "transaction_date",
+    "amount": "transaction_amount",
+    "txn_type": "transaction_type",
 }
 
 FEATURE_GROUPS = [

@@ -1,0 +1,53 @@
+name: Model Validation
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'  # Every Monday at 6am UTC
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run model regression tests
+        run: |
+          python3 -c "
+          import json
+          from pathlib import Path
+          reports_dir = Path('outputs/reports')
+          if not reports_dir.exists():
+              print('No reports found — skipping')
+              exit(0)
+          results = {}
+          for f in reports_dir.glob('*_report.json'):
+              data = json.loads(f.read_text())
+              metrics = data.get('metrics', data)
+              name = f.stem.replace('_report', '')
+              results[name] = {
+                  'auc_roc': metrics.get('auc_roc', metrics.get('roc_auc', 0)),
+                  'auc_pr': metrics.get('auc_pr', metrics.get('avg_precision', 0)),
+                  'f1': metrics.get('f1_score', metrics.get('f1', 0)),
+              }
+          if not results:
+              print('No model reports — skipping')
+              exit(0)
+          print('Model Performance Report:')
+          for name, m in sorted(results.items(), key=lambda x: -x[1]['auc_roc']):
+              print(f'  {name}: AUC-ROC={m[\"auc_roc\"]:.4f} AUC-PR={m[\"auc_pr\"]:.4f} F1={m[\"f1\"]:.4f}')
+          best = max(results.values(), key=lambda x: x['auc_roc'])
+          assert best['auc_roc'] > 0.85, f'Best AUC-ROC {best[\"auc_roc\"]:.4f} below 0.85'
+          print(f'PASSED: Best AUC-ROC = {best[\"auc_roc\"]:.4f}')
+          "
+
+      - name: Run test suite
+        run: pytest tests/ -v --tb=short

@@ -1,54 +1,64 @@
 """FastAPI application for RBI Mule Account Detection."""
-from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
-from pathlib import Path
 
-import joblib
-import numpy as np
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.api.routes.health import router as health_router
-from src.api.routes.predict import router as predict_router
-from src.utils.config import MODEL_PATH
+from src.api.middleware import RequestLoggingMiddleware
+from src.api.dependencies import startup_load_model
+from src.api.schemas import HealthResponse
+from src.api.routes import predict, account, model, dashboard, fairness, benchmark
 
-logger = logging.getLogger(__name__)
-
-_model = None
-
-
-def get_model():
-    return _model
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _model
-    model_path = Path(MODEL_PATH)
-    if model_path.exists():
-        _model = joblib.load(model_path)
-        logger.info("Model loaded from %s", model_path)
-    else:
-        logger.warning("No model found at %s — predictions will be unavailable", model_path)
+    startup_load_model()
     yield
-    _model = None
 
 
 app = FastAPI(
     title="RBI Mule Account Detection API",
-    description="REST API for detecting mule accounts in banking transaction data.",
+    description="ML-powered mule account detection with SHAP explanations and fairness auditing",
     version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
     lifespan=lifespan,
 )
 
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["GET", "POST"],
+    allow_credentials=True,
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
-app.include_router(health_router)
-app.include_router(predict_router, prefix="/api/v1")
+# Request logging
+app.add_middleware(RequestLoggingMiddleware)
+
+# Include routers
+app.include_router(predict.router)
+app.include_router(account.router)
+app.include_router(model.router)
+app.include_router(dashboard.router)
+app.include_router(fairness.router)
+app.include_router(benchmark.router)
+
+
+@app.get("/health", response_model=HealthResponse, tags=["system"])
+def health_check():
+    from src.api.dependencies import model_service, _db_initialized
+    return HealthResponse(
+        status="healthy",
+        version="1.0.0",
+        model_loaded=model_service.is_loaded,
+        db_connected=_db_initialized,
+    )

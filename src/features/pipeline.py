@@ -1,26 +1,23 @@
-"""Master feature pipeline — orchestrates all 8 feature groups into 57-feature matrix."""
-from __future__ import annotations
-
 import numpy as np
 import pandas as pd
 from pathlib import Path
 
+from src.features.velocity import VelocityFeatureGenerator
+from src.features.amount_patterns import AmountPatternFeatureGenerator
+from src.features.temporal import TemporalFeatureGenerator
+from src.features.passthrough import PassThroughFeatureGenerator
+from src.features.graph_network import GraphNetworkFeatureGenerator
+from src.features.profile_mismatch import ProfileMismatchFeatureGenerator
+from src.features.kyc_behavioral import KYCBehavioralFeatureGenerator
+from src.features.interactions import InteractionFeatureGenerator
+
 
 class FeaturePipeline:
-    def __init__(self, cutoff_date=None, skip_graph: bool = False):
+    def __init__(self, cutoff_date=None, skip_graph=False):
         self.cutoff = cutoff_date or pd.Timestamp('2025-06-30')
         self.skip_graph = skip_graph
 
-    def run(self, txn: pd.DataFrame, profile: pd.DataFrame, labels: pd.DataFrame = None) -> pd.DataFrame:
-        from src.features.velocity import VelocityFeatureGenerator
-        from src.features.amount_patterns import AmountPatternFeatureGenerator
-        from src.features.temporal import TemporalFeatureGenerator
-        from src.features.passthrough import PassThroughFeatureGenerator
-        from src.features.graph_network import GraphNetworkFeatureGenerator
-        from src.features.profile_mismatch import ProfileMismatchFeatureGenerator
-        from src.features.kyc_behavioral import KYCBehavioralFeatureGenerator
-        from src.features.interactions import InteractionFeatureGenerator
-
+    def run(self, txn, profile, labels=None):
         # Stage 1: Independent groups
         velocity = VelocityFeatureGenerator().compute(txn, profile, self.cutoff)
         amount = AmountPatternFeatureGenerator().compute(txn, profile, self.cutoff)
@@ -33,21 +30,20 @@ class FeaturePipeline:
         )
         kyc = KYCBehavioralFeatureGenerator().compute(txn, profile, self.cutoff)
 
-        # Stage 3: Graph (expensive, optional)
+        # Stage 3: Graph (expensive, can skip)
         if not self.skip_graph:
             graph = GraphNetworkFeatureGenerator(labels_df=labels).compute(txn, profile, self.cutoff)
         else:
             graph = pd.DataFrame(
-                0.0,
-                index=velocity.index,
-                columns=GraphNetworkFeatureGenerator().get_feature_names(),
+                0.0, index=velocity.index,
+                columns=GraphNetworkFeatureGenerator().get_feature_names()
             )
             graph.index.name = 'account_id'
 
         # Merge all on account_id index
         all_features = velocity.join([amount, temporal, passthrough, profile_mismatch, kyc, graph], how='outer')
 
-        # Stage 4: Interaction features (needs complete matrix)
+        # Stage 4: Interactions (needs complete matrix)
         interactions = InteractionFeatureGenerator().compute_from_features(all_features, profile)
         all_features = all_features.join(interactions, how='left')
 
@@ -56,8 +52,7 @@ class FeaturePipeline:
         print(f'Feature matrix: {all_features.shape[0]} accounts x {all_features.shape[1]} features')
         return all_features
 
-    def run_and_save(self, txn: pd.DataFrame, profile: pd.DataFrame,
-                     labels: pd.DataFrame, output_path: str) -> pd.DataFrame:
+    def run_and_save(self, txn, profile, labels, output_path):
         features = self.run(txn, profile, labels)
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         features.to_parquet(output_path)
@@ -66,15 +61,14 @@ class FeaturePipeline:
 
 if __name__ == '__main__':
     import argparse
-
-    parser = argparse.ArgumentParser(description='Run feature pipeline')
-    parser.add_argument('--skip-graph', action='store_true', help='Skip graph features (faster)')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--skip-graph', action='store_true')
     parser.add_argument('--output', default='data/processed/features_matrix.parquet')
-    parser.add_argument('--cutoff', default='2025-06-30')
     args = parser.parse_args()
 
-    cutoff = pd.Timestamp(args.cutoff)
-    pipeline = FeaturePipeline(cutoff_date=cutoff, skip_graph=args.skip_graph)
-    print(f'Running pipeline with cutoff={cutoff}, skip_graph={args.skip_graph}')
-    # Users should load txn/profile/labels from their data files
-    print('Load txn, profile, labels from data/raw/ and call pipeline.run_and_save()')
+    from src.data.preprocessor import Preprocessor
+    prep = Preprocessor()
+    txn, profile, labels = prep.load_and_preprocess()
+
+    pipeline = FeaturePipeline(skip_graph=args.skip_graph)
+    pipeline.run_and_save(txn, profile, labels, args.output)

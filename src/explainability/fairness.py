@@ -1,194 +1,170 @@
-"""Fairness audit for mule detection model."""
-from __future__ import annotations
-
-import json
-import logging
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
-
-logger = logging.getLogger(__name__)
-
-SENSITIVE_FEATURES = ["age_group", "geography_tier", "account_type"]
+from pathlib import Path
+import json
 
 
 class FairnessAuditor:
-    SENSITIVE_FEATURES = SENSITIVE_FEATURES
+    SENSITIVE_FEATURES = ['age_group', 'geography_tier', 'account_type']
 
-    def prepare_sensitive_features(self, profile: pd.DataFrame) -> pd.DataFrame:
-        """Derive fairness-relevant groupings from profile data."""
-        result = pd.DataFrame(index=profile.index)
+    def prepare_sensitive_features(self, profile_df):
+        sensitive_df = pd.DataFrame(index=profile_df.index)
 
-        if "age" in profile.columns:
-            age = profile["age"]
-            result["age_group"] = pd.cut(
-                age,
-                bins=[0, 25, 45, 65, 200],
-                labels=["<25", "25-45", "45-65", ">65"],
-                right=True,
-            ).astype(str)
-        elif "age_group" in profile.columns:
-            result["age_group"] = profile["age_group"].astype(str)
-        else:
-            result["age_group"] = "unknown"
+        if 'age' in profile_df.columns:
+            bins = [0, 25, 45, 65, 200]
+            labels = ['<25', '25-45', '45-65', '>65']
+            sensitive_df['age_group'] = pd.cut(profile_df['age'], bins=bins, labels=labels)
+        elif 'age_group' in profile_df.columns:
+            sensitive_df['age_group'] = profile_df['age_group']
 
-        if "geography_tier" in profile.columns:
-            result["geography_tier"] = profile["geography_tier"].astype(str)
-        elif "city_tier" in profile.columns:
-            result["geography_tier"] = profile["city_tier"].astype(str)
-        else:
-            result["geography_tier"] = "unknown"
+        if 'geography_tier' in profile_df.columns:
+            sensitive_df['geography_tier'] = profile_df['geography_tier']
+        elif 'geo_tier' in profile_df.columns:
+            sensitive_df['geography_tier'] = profile_df['geo_tier']
 
-        if "account_type" in profile.columns:
-            result["account_type"] = profile["account_type"].astype(str)
-        else:
-            result["account_type"] = "unknown"
+        if 'account_type' in profile_df.columns:
+            sensitive_df['account_type'] = profile_df['account_type']
 
-        return result
+        return sensitive_df
 
-    def audit(self, y_true, y_pred, sensitive_df: pd.DataFrame) -> dict:
-        """Run fairness audit using MetricFrame-style analysis.
-
-        Returns per-group metrics and disparity measures.
-        """
+    def audit(self, y_true, y_pred, sensitive_df):
         try:
-            from fairlearn.metrics import (
-                MetricFrame,
-                demographic_parity_difference,
-                equalized_odds_difference,
-            )
+            from fairlearn.metrics import MetricFrame, demographic_parity_difference, equalized_odds_difference
             from sklearn.metrics import accuracy_score, recall_score, precision_score, f1_score
-
-            metric_fns = {
-                "accuracy": accuracy_score,
-                "recall": lambda yt, yp: recall_score(yt, yp, zero_division=0),
-                "precision": lambda yt, yp: precision_score(yt, yp, zero_division=0),
-                "f1": lambda yt, yp: f1_score(yt, yp, zero_division=0),
-                "selection_rate": lambda yt, yp: yp.mean() if hasattr(yp, "mean") else np.mean(yp),
-            }
-
-            results = {}
-            for sf_name in SENSITIVE_FEATURES:
-                if sf_name not in sensitive_df.columns:
-                    continue
-                sf = sensitive_df[sf_name]
-                mf = MetricFrame(
-                    metrics=metric_fns,
-                    y_true=y_true,
-                    y_pred=y_pred,
-                    sensitive_features=sf,
-                )
-                dp_diff = demographic_parity_difference(y_true, y_pred, sensitive_features=sf)
-                eo_diff = equalized_odds_difference(y_true, y_pred, sensitive_features=sf)
-
-                results[sf_name] = {
-                    "overall": mf.overall.to_dict(),
-                    "by_group": mf.by_group.to_dict(),
-                    "demographic_parity_difference": float(dp_diff),
-                    "equalized_odds_difference": float(eo_diff),
-                    "passes_80pct_rule": self._check_80pct_rule(y_pred, sf),
-                }
-            return results
-
         except ImportError:
-            logger.warning("fairlearn not installed; running manual fairness audit")
-            return self._manual_audit(y_true, y_pred, sensitive_df)
+            return self._audit_manual(y_true, y_pred, sensitive_df)
 
-    def _manual_audit(self, y_true, y_pred, sensitive_df: pd.DataFrame) -> dict:
-        from sklearn.metrics import recall_score, precision_score
+        metrics = {
+            'accuracy': accuracy_score,
+            'recall': recall_score,
+            'precision': precision_score,
+            'f1': f1_score,
+            'selection_rate': lambda y_t, y_p: np.mean(y_p),
+        }
 
-        y_true = np.asarray(y_true)
-        y_pred = np.asarray(y_pred)
         results = {}
-
-        for sf_name in SENSITIVE_FEATURES:
-            if sf_name not in sensitive_df.columns:
+        for feature in self.SENSITIVE_FEATURES:
+            if feature not in sensitive_df.columns:
                 continue
-            sf = sensitive_df[sf_name].values
-            groups = np.unique(sf)
-            by_group = {}
-            selection_rates = []
 
-            for g in groups:
-                mask = sf == g
-                if mask.sum() == 0:
-                    continue
-                yt_g = y_true[mask]
-                yp_g = y_pred[mask]
-                sel_rate = yp_g.mean()
-                selection_rates.append(sel_rate)
-                by_group[str(g)] = {
-                    "n": int(mask.sum()),
-                    "selection_rate": float(sel_rate),
-                    "recall": float(recall_score(yt_g, yp_g, zero_division=0)),
-                    "precision": float(precision_score(yt_g, yp_g, zero_division=0)),
-                }
+            mf = MetricFrame(
+                metrics=metrics,
+                y_true=y_true,
+                y_pred=y_pred,
+                sensitive_features=sensitive_df[feature]
+            )
 
-            dp_diff = max(selection_rates) - min(selection_rates) if selection_rates else 0.0
-            results[sf_name] = {
-                "by_group": by_group,
-                "demographic_parity_difference": float(dp_diff),
-                "passes_80pct_rule": self._check_80pct_rule(y_pred, sensitive_df[sf_name].values),
+            dpd = demographic_parity_difference(y_true, y_pred, sensitive_features=sensitive_df[feature])
+
+            try:
+                eod = equalized_odds_difference(y_true, y_pred, sensitive_features=sensitive_df[feature])
+            except Exception:
+                eod = None
+
+            # 80% rule check
+            group_rates = mf.by_group['selection_rate']
+            min_rate = group_rates.min()
+            max_rate = group_rates.max()
+            passes_80_rule = (min_rate / max_rate >= 0.8) if max_rate > 0 else True
+
+            results[feature] = {
+                'overall': mf.overall.to_dict(),
+                'by_group': mf.by_group.to_dict(),
+                'demographic_parity_difference': float(dpd),
+                'equalized_odds_difference': float(eod) if eod is not None else None,
+                'passes_80_percent_rule': bool(passes_80_rule),
+                'min_selection_rate': float(min_rate),
+                'max_selection_rate': float(max_rate),
             }
+
         return results
 
-    def _check_80pct_rule(self, y_pred, sensitive_feature) -> bool:
-        """Check if all groups meet the 80% rule (adverse impact ratio >= 0.8)."""
-        y_pred = np.asarray(y_pred)
-        groups = np.unique(sensitive_feature)
-        rates = []
-        for g in groups:
-            mask = sensitive_feature == g
-            if mask.sum() == 0:
-                continue
-            rates.append(y_pred[mask].mean())
-        if not rates:
-            return True
-        return min(rates) / max(rates) >= 0.8
+    def _audit_manual(self, y_true, y_pred, sensitive_df):
+        from sklearn.metrics import accuracy_score, recall_score, precision_score, f1_score
 
-    def generate_report(self, results: dict, save_path: str = "outputs/fairness_report.json") -> str:
+        results = {}
+        for feature in self.SENSITIVE_FEATURES:
+            if feature not in sensitive_df.columns:
+                continue
+
+            groups = sensitive_df[feature].unique()
+            by_group = {}
+            for group in groups:
+                mask = sensitive_df[feature] == group
+                if mask.sum() == 0:
+                    continue
+                yt = y_true[mask]
+                yp = y_pred[mask]
+                by_group[str(group)] = {
+                    'accuracy': float(accuracy_score(yt, yp)),
+                    'recall': float(recall_score(yt, yp, zero_division=0)),
+                    'precision': float(precision_score(yt, yp, zero_division=0)),
+                    'f1': float(f1_score(yt, yp, zero_division=0)),
+                    'selection_rate': float(np.mean(yp)),
+                }
+
+            rates = [v['selection_rate'] for v in by_group.values()]
+            min_rate = min(rates) if rates else 0
+            max_rate = max(rates) if rates else 0
+            passes_80_rule = (min_rate / max_rate >= 0.8) if max_rate > 0 else True
+
+            results[feature] = {
+                'by_group': by_group,
+                'passes_80_percent_rule': bool(passes_80_rule),
+                'min_selection_rate': float(min_rate),
+                'max_selection_rate': float(max_rate),
+            }
+
+        return results
+
+    def generate_report(self, results, save_path='outputs/reports/fairness_report.json'):
         save_path = Path(save_path)
         save_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with open(save_path, "w") as f:
-            json.dump(results, f, indent=2, default=str)
+        # Convert to JSON-serializable
+        def convert(obj):
+            if isinstance(obj, (np.integer,)):
+                return int(obj)
+            if isinstance(obj, (np.floating,)):
+                return float(obj)
+            if isinstance(obj, np.ndarray):
+                return obj.tolist()
+            if isinstance(obj, pd.DataFrame):
+                return obj.to_dict()
+            return obj
 
-        lines = ["=" * 60, "FAIRNESS AUDIT REPORT", "=" * 60]
-        for sf_name, res in results.items():
-            lines.append(f"\nSensitive Feature: {sf_name}")
-            lines.append(f"  Demographic Parity Difference: {res.get('demographic_parity_difference', 'N/A'):.4f}")
-            lines.append(f"  Equalized Odds Difference: {res.get('equalized_odds_difference', 'N/A'):.4f}" if "equalized_odds_difference" in res else "  Equalized Odds: N/A")
-            passes = res.get("passes_80pct_rule", False)
-            lines.append(f"  Passes 80% Rule: {'YES' if passes else 'NO (BIAS DETECTED)'}")
-        lines.append("=" * 60)
+        report = json.loads(json.dumps(results, default=convert))
 
-        summary = "\n".join(lines)
-        logger.info(summary)
-        return summary
+        with open(save_path, 'w') as f:
+            json.dump(report, f, indent=2, default=str)
 
-    def mitigate_if_needed(self, model, X_train, y_train, sensitive_train, audit_results: dict):
-        """Apply ThresholdOptimizer if bias detected in any group."""
-        bias_detected = any(
-            not res.get("passes_80pct_rule", True)
-            for res in audit_results.values()
-        )
-        if not bias_detected:
-            logger.info("No bias detected; mitigation not needed.")
-            return model
+        # Formatted summary
+        summary = "FAIRNESS AUDIT REPORT\n" + "=" * 50 + "\n\n"
+        for feature, data in results.items():
+            summary += f"Sensitive Feature: {feature}\n"
+            summary += f"  Passes 80% Rule: {data.get('passes_80_percent_rule', 'N/A')}\n"
+            summary += f"  Min Selection Rate: {data.get('min_selection_rate', 'N/A'):.4f}\n"
+            summary += f"  Max Selection Rate: {data.get('max_selection_rate', 'N/A'):.4f}\n"
+            if 'demographic_parity_difference' in data:
+                summary += f"  Demographic Parity Diff: {data['demographic_parity_difference']:.4f}\n"
+            summary += "\n"
 
+        summary_path = save_path.with_suffix('.txt')
+        with open(summary_path, 'w') as f:
+            f.write(summary)
+
+        return report
+
+    def mitigate_if_needed(self, model, X, y, sensitive_features, threshold=0.8):
         try:
             from fairlearn.postprocessing import ThresholdOptimizer
-
-            mitigated = ThresholdOptimizer(
-                estimator=model,
-                constraints="demographic_parity",
-                objective="balanced_accuracy_score",
-                predict_method="predict_proba",
-            )
-            mitigated.fit(X_train, y_train, sensitive_features=sensitive_train)
-            logger.info("ThresholdOptimizer applied for bias mitigation.")
-            return mitigated
         except ImportError:
-            logger.warning("fairlearn not available; skipping mitigation.")
-            return model
+            return None
+
+        mitigated = ThresholdOptimizer(
+            estimator=model,
+            constraints='demographic_parity',
+            objective='balanced_accuracy_score',
+        )
+        mitigated.fit(X, y, sensitive_features=sensitive_features)
+        return mitigated

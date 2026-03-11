@@ -1,20 +1,202 @@
-# RBI Mule Account Detection System
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python">
+  <img src="https://img.shields.io/badge/LightGBM-AUC_0.989-00C853?style=for-the-badge&logo=microsoft&logoColor=white" alt="LightGBM">
+  <img src="https://img.shields.io/badge/FastAPI-13_Endpoints-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI">
+  <img src="https://img.shields.io/badge/Streamlit-8_Pages-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white" alt="Streamlit">
+  <img src="https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker">
+</p>
 
-Production-grade machine learning system for detecting money mule accounts in banking transaction data, built for the [RBI Innovation Hub](https://rbihub.in/).
+<h1 align="center">RBI Mule Account Detection System</h1>
 
-> **Money mules** are bank accounts used — knowingly or unknowingly — to launder proceeds of fraud. This system identifies them using 57 engineered features, 6 ML models, graph network analysis, and full explainability.
+<p align="center">
+  <strong>A production-grade machine learning system that identifies mule accounts used for money laundering in Indian banking — built for the Reserve Bank Innovation Hub x IIT Delhi Tryst Hackathon.</strong>
+</p>
+
+<p align="center">
+  <em>Because every flagged mule account is a financial crime stopped before it reaches an innocent victim.</em>
+</p>
 
 ---
 
-## Highlights
+## The Problem We're Solving
 
-- **57 features** across 8 groups (velocity, amount patterns, temporal, passthrough, graph network, profile mismatch, KYC/behavioral, interactions)
-- **6 model architectures** — Logistic Regression, Random Forest, XGBoost, LightGBM, CatBoost, PyTorch Neural Net
-- **Optuna** hyperparameter optimization with Bayesian search
-- **SHAP + fairness** explainability with natural-language explanations
-- **FastAPI** REST API for real-time scoring
-- **Streamlit** dashboard for monitoring and account lookup
-- **Docker Compose** for one-command deployment
+Money mules are people who — knowingly or unknowingly — allow their bank accounts to be used as conduits for laundered money. They're the human infrastructure of financial crime: drug money, fraud proceeds, and terrorist financing all flow through mule accounts before disappearing into the legitimate economy.
+
+India's banking system processes **billions of transactions daily**. Manually reviewing accounts is impossible. Traditional rule-based systems generate too many false positives. We need something smarter.
+
+**This system uses machine learning to automatically detect mule accounts** by analyzing transaction patterns, network behavior, and account profiles — achieving a **98.9% AUC-ROC** while maintaining interpretability through SHAP explanations and fairness auditing.
+
+---
+
+## What Makes This Different
+
+This isn't just a model in a notebook. It's a **complete, deployable system**:
+
+- **57 engineered features** derived from 12 known mule behavior patterns (rapid fund cycling, structuring, dormancy-burst, etc.)
+- **6 models benchmarked** with Optuna hyperparameter tuning — LightGBM wins with 0.989 AUC-ROC
+- **Temporal detection** — not just *who* is a mule, but *when* the suspicious activity happened
+- **Real-time scoring** via FastAPI with SHAP explanations for every prediction
+- **Fairness auditing** built in — we check for bias across demographics before deployment
+- **Interactive dashboard** — 8-page Streamlit app with a neon futuristic theme for visual analysis
+- **Network analysis** — PageRank, community detection, and interactive graph visualization
+
+---
+
+## Key Results
+
+| Metric | Score |
+|--------|-------|
+| **AUC-ROC** | **0.9889** |
+| **AUC-PR** | **0.8685** |
+| **Recall** | **0.8868** |
+| **F1 Score** | **0.5802** |
+| **Precision** | **0.4312** |
+| **Accuracy** | **0.9858** |
+
+> The model catches **88.7% of all mule accounts** while keeping false positives manageable — critical for a system that affects real people's bank accounts.
+
+### Model Comparison
+
+| Model | AUC-ROC | AUC-PR | F1 | Notes |
+|-------|---------|--------|-----|-------|
+| Logistic Regression | 0.8278 | 0.3458 | 0.4421 | Baseline, interpretable |
+| Random Forest | 0.9052 | 0.4626 | 0.5000 | Solid ensemble |
+| XGBoost | 0.9097 | 0.4568 | 0.5111 | Competitive |
+| **LightGBM** | **0.9889** | **0.8685** | **0.5802** | **Best performer** |
+| CatBoost | 0.9109 | 0.4587 | 0.4779 | Handles categoricals well |
+| Neural Network | 0.8638 | 0.4412 | 0.5238 | PyTorch, 3-layer MLP |
+
+---
+
+## Architecture
+
+The system follows a clean pipeline architecture — each stage is independently testable and reproducible:
+
+```
+                         RBI Mule Detection System
+                         ========================
+
+  DATA LAYER                 FEATURE LAYER               MODEL LAYER
+  ──────────                 ─────────────               ───────────
+  ┌─────────────┐           ┌─────────────────┐         ┌─────────────────┐
+  │  10 CSV     │           │  8 Feature      │         │  6 Models       │
+  │  Files      │──Clean──▶ │  Groups         │──Fit──▶ │  + Optuna       │
+  │  7.4M txns  │  Merge    │  57 Features    │  Tune   │  LightGBM best  │
+  │  40K accts  │  Validate │  Registry-based │         │  0.989 AUC-ROC  │
+  └─────────────┘           └─────────────────┘         └────────┬────────┘
+                                                                 │
+                                    ┌────────────────────────────┤
+                                    ▼                            ▼
+                         ┌──────────────────┐         ┌──────────────────┐
+                         │  EXPLAINABILITY  │         │  TEMPORAL        │
+                         │  ──────────────  │         │  ────────        │
+                         │  SHAP values     │         │  Z-score anomaly │
+                         │  Fairness audit  │         │  Suspicious      │
+                         │  NL explanations │         │  window detect   │
+                         │  Model cards     │         │  Temporal IoU    │
+                         └────────┬─────────┘         └────────┬─────────┘
+                                  │                            │
+                                  ▼                            ▼
+                         ┌──────────────────┐         ┌──────────────────┐
+                         │  FASTAPI         │         │  STREAMLIT       │
+                         │  ────────        │         │  ──────────      │
+                         │  13 REST routes  │         │  8 pages         │
+                         │  Real-time SHAP  │         │  Neon theme      │
+                         │  SQLite cache    │         │  Interactive viz │
+                         └──────────────────┘         └──────────────────┘
+```
+
+---
+
+## Feature Engineering
+
+The heart of the system. We engineered **57 features** across **8 groups**, each inspired by real mule account behaviors documented in AML research:
+
+### Feature Groups
+
+| Group | Count | What It Captures | Why It Matters |
+|-------|-------|-----------------|----------------|
+| **Velocity** | 10 | Transaction counts & amounts over 1d/7d/30d/90d windows, acceleration ratios | Mules show sudden spikes in activity — normal accounts don't go from 2 txns/month to 50 overnight |
+| **Amount Patterns** | 8 | Round amounts, structuring scores, amount entropy, skewness | Laundered money often comes in suspiciously round numbers or just below reporting thresholds |
+| **Temporal** | 8 | Dormancy periods, burst detection, night/weekend ratios, monthly CV | Mule accounts are often dormant for months, then explode with activity at odd hours |
+| **Pass-Through** | 7 | Credit-debit matching, rapid turnover, net flow ratio | The hallmark of a mule: money in, money out, fast — the account is just a pipe |
+| **Graph/Network** | 10 | PageRank, betweenness centrality, community mule density, fan-in/out | Mules sit at the center of suspicious networks — graph features catch what transaction-level features miss |
+| **Profile Mismatch** | 5 | Volume vs balance, account age vs activity, product mismatch score | A 19-year-old student account suddenly processing millions? Something's wrong |
+| **KYC Behavioral** | 4 | Mobile change spikes, KYC completeness, linked accounts anomaly | Frequent contact info changes and incomplete KYC are red flags |
+| **Interactions** | 5 | Cross-group multiplicative features (dormancy x burst, pass-through x velocity) | The most powerful signals come from combining: a dormant account that suddenly bursts AND shows pass-through behavior is almost certainly a mule |
+
+### Real-Time Feature Computation
+
+The system can compute all 57 features **on-the-fly** for any account — even ones not in the training set. Upload a CSV of transactions and get instant risk scores through the dashboard or API.
+
+---
+
+## The Dashboard
+
+An 8-page interactive Streamlit dashboard with a **neon futuristic dark theme** — glassmorphism cards, gradient text, floating orbs, and the Orbitron font family. It's not just functional; it's designed to make data exploration enjoyable.
+
+### Pages
+
+| # | Page | What It Does |
+|---|------|-------------|
+| 🏠 | **Home** | Pipeline overview, quick-test predictions (existing accounts + CSV upload), system architecture |
+| 📊 | **Overview** | Dataset statistics, class distribution, transaction volume trends, data quality audit |
+| 🔬 | **Feature Explorer** | Feature distributions by class, correlation heatmaps, KS tests for discriminative power |
+| 🏆 | **Model Comparison** | ROC/PR curves, confusion matrices, threshold analysis, side-by-side model metrics |
+| 🧠 | **Explainability** | Global SHAP analysis, per-account waterfall plots, natural language explanations |
+| 🕸 | **Network Graph** | Interactive pyvis graph, PageRank visualization, mule cluster detection |
+| ⚖ | **Fairness Audit** | Demographic parity, equalized odds, 80% rule compliance, remediation recommendations |
+| 🔎 | **Account Inspector** | Deep-dive into any account — risk score, transaction timeline, heatmaps, SHAP breakdown |
+| 🚀 | **API Demo** | Live prediction interface, batch scoring, threshold sensitivity analysis |
+
+---
+
+## API Reference
+
+The FastAPI backend serves predictions via REST, with automatic OpenAPI docs at `/docs`.
+
+```
+Base URL: http://localhost:8001
+```
+
+### Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/predict` | Single account prediction with SHAP explanation |
+| `POST` | `/predict/batch` | Score multiple accounts at once |
+| `GET` | `/account/{id}` | Full account analysis (features + prediction + history) |
+| `GET` | `/model/info` | Current model metadata and performance metrics |
+| `GET` | `/model/features` | Feature list grouped by category with importance scores |
+| `GET` | `/dashboard/stats` | Aggregate statistics for the dashboard |
+| `GET` | `/fairness/report` | Fairness audit results across sensitive features |
+| `GET` | `/benchmark/results` | All model comparison metrics |
+| `GET` | `/health` | Health check with version info |
+
+### Example Request
+
+```bash
+curl -X POST http://localhost:8001/predict \
+  -H "Content-Type: application/json" \
+  -d '{"account_id": "ACCT_000077", "threshold": 0.5}'
+```
+
+### Example Response
+
+```json
+{
+  "account_id": "ACCT_000077",
+  "probability": 0.0234,
+  "label": "LEGITIMATE",
+  "model_version": "v1",
+  "top_features": [
+    {"feature": "pass_through_score", "shap_value": -0.0412},
+    {"feature": "velocity_7d_count", "shap_value": -0.0281},
+    {"feature": "dormancy_ratio", "shap_value": 0.0156}
+  ],
+  "natural_language": "This account shows normal transaction patterns with low pass-through behavior..."
+}
+```
 
 ---
 
@@ -23,202 +205,265 @@ Production-grade machine learning system for detecting money mule accounts in ba
 ### Prerequisites
 
 - Python 3.10+
-- pip or [uv](https://docs.astral.sh/uv/)
+- 4GB+ RAM (for model training)
+- Data files from the hackathon placed in `data/raw/`
 
 ### Installation
 
 ```bash
-git clone https://github.com/<your-username>/rbi-mule-detection.git
+git clone https://github.com/Arnav-0/rbi-mule-detection.git
 cd rbi-mule-detection
-python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -e .
+pip install -r requirements.txt
 ```
 
-### Configuration
+### Run the Full Pipeline
 
 ```bash
-cp .env.example .env
-# Edit .env with your settings (WandB key, paths, etc.)
+make all
 ```
 
-### Data Setup
+This runs everything: data validation → feature engineering → model training → evaluation → explainability → temporal detection → submission generation.
 
-Place the raw CSV files in `data/raw/`:
+### Or Step by Step
 
+```bash
+# 1. Validate raw data files
+make validate
+
+# 2. Engineer 57 features for all 40K accounts
+make features
+
+# 3. Train 6 models with Optuna hyperparameter tuning
+make train
+
+# 4. Evaluate and compare all models
+make evaluate
+make compare
+
+# 5. Generate SHAP explanations and fairness reports
+make explain
+make fairness
+
+# 6. Detect suspicious time windows
+make temporal
+
+# 7. Launch the API and dashboard
+make serve        # FastAPI on port 8001
+make dashboard    # Streamlit on port 8501
 ```
-data/raw/
-├── customers.csv
-├── accounts.csv
-├── customer_account_linkage.csv
-├── product_details.csv
-├── transactions_part_0.csv  ... transactions_part_5.csv
-├── train_labels.csv
-└── test_accounts.csv
-```
 
-See [data/README.md](data/README.md) for full schema documentation.
+### Docker
+
+```bash
+docker-compose up       # Start API + Dashboard
+docker-compose down     # Stop all services
+```
 
 ---
 
-## Pipeline
+## Data
 
-Run the full pipeline step-by-step or all at once:
+The system processes **10 CSV files** from the hackathon dataset:
 
-```bash
-# Full pipeline
-make all
+| File | Records | Description |
+|------|---------|-------------|
+| `customers.csv` | ~39,988 | Customer demographics and KYC info |
+| `accounts.csv` | ~40,038 | Account types, opening dates, balances |
+| `product_details.csv` | ~39,988 | Banking products held by each customer |
+| `linkage_table.csv` | ~40,038 | Customer-to-account mapping |
+| `transactions_part_*.csv` (x6) | ~7.4M total | Full transaction history (Jul 2020 - Jun 2025) |
+| `train_labels.csv` | ~24,023 | Ground truth labels (263 mules, 1.09% mule rate) |
+| `test_accounts.csv` | ~16,015 | Accounts to predict |
 
-# Or step by step:
-make data           # Load & validate raw data
-make features       # Engineer 57 features (with graph network)
-make features-fast  # Skip graph features for speed
-make train          # Train all 6 models with Optuna
-make train-quick    # Quick train (LightGBM, 20 trials)
-make evaluate       # Evaluate & compare models
-make explain        # Generate SHAP explanations
-make fairness       # Run fairness audit
-make temporal       # Detect suspicious temporal windows
-make submit         # Generate submission predictions
+### Submission Format
+
+```csv
+account_id,is_mule,suspicious_start,suspicious_end
+ACCT_000003,0.87,2023-11-15T09:30:00,2024-02-20T16:45:00
+ACCT_000077,0.02,,
 ```
+
+- `is_mule`: Probability score [0, 1] — primary metric is **AUC-ROC**
+- `suspicious_start/end`: ISO timestamps for the detected mule activity window — bonus metric is **Temporal IoU**
 
 ---
 
 ## Project Structure
 
 ```
-├── src/
-│   ├── data/              # Loading, merging, preprocessing, splitting, validation
-│   ├── features/          # 57 features in 8 generators + pipeline orchestration
-│   ├── models/            # 6 model wrappers + trainer, evaluator, calibrator, selector
-│   ├── explainability/    # SHAP, fairness (Fairlearn), model cards, NL explanations
-│   ├── temporal/          # Suspicious window detection
-│   ├── api/               # FastAPI REST API (predict, health)
-│   ├── db/                # Database utilities
-│   └── utils/             # Config, constants, logging, metrics
-├── frontend/              # Streamlit dashboard
-├── tests/                 # pytest test suite
-├── notebooks/             # Exploratory data analysis
-├── docker/                # Dockerfiles for API and dashboard
-├── data/                  # Raw and processed data (gitignored)
-├── outputs/               # Models, plots, predictions, reports (gitignored)
-├── docker-compose.yml     # One-command deployment
-├── Makefile               # Pipeline orchestration
-├── pyproject.toml         # Project metadata & dependencies
-└── requirements.txt       # Pip requirements
+rbi-mule-detection/
+│
+├── src/                          # Core source code
+│   ├── data/                     # Data pipeline
+│   │   ├── loader.py             #   Load & parse CSVs
+│   │   ├── merger.py             #   Merge all tables
+│   │   ├── preprocessor.py       #   Clean & transform
+│   │   ├── splitter.py           #   Train/test split
+│   │   └── validator.py          #   Schema validation
+│   │
+│   ├── features/                 # Feature engineering
+│   │   ├── registry.py           #   Central feature registry
+│   │   ├── pipeline.py           #   Feature computation pipeline
+│   │   ├── realtime.py           #   Real-time feature computation
+│   │   ├── velocity.py           #   Velocity features (10)
+│   │   ├── amount_patterns.py    #   Amount pattern features (8)
+│   │   ├── temporal.py           #   Temporal features (8)
+│   │   ├── passthrough.py        #   Pass-through features (7)
+│   │   ├── graph_network.py      #   Network/graph features (10)
+│   │   ├── profile_mismatch.py   #   Profile mismatch features (5)
+│   │   ├── kyc_behavioral.py     #   KYC behavioral features (4)
+│   │   └── interactions.py       #   Interaction features (5)
+│   │
+│   ├── models/                   # Model training & evaluation
+│   │   ├── trainer.py            #   Unified training loop
+│   │   ├── evaluator.py          #   Metrics & comparison
+│   │   ├── logistic.py           #   Logistic Regression
+│   │   ├── random_forest.py      #   Random Forest
+│   │   ├── xgboost_model.py      #   XGBoost
+│   │   ├── lightgbm_model.py     #   LightGBM (best)
+│   │   ├── catboost_model.py     #   CatBoost
+│   │   └── neural_net.py         #   PyTorch MLP
+│   │
+│   ├── explainability/           # Model interpretability
+│   │   ├── shap_explainer.py     #   SHAP value computation
+│   │   ├── fairness.py           #   Fairness auditing
+│   │   ├── pdp.py                #   Partial dependence plots
+│   │   ├── model_card.py         #   Model card generation
+│   │   └── nl_explanations.py    #   Natural language explanations
+│   │
+│   ├── temporal/                 # Temporal analysis
+│   │   └── window_detector.py    #   Suspicious window detection
+│   │
+│   ├── api/                      # FastAPI backend
+│   │   ├── main.py               #   App setup & lifespan
+│   │   ├── schemas.py            #   Pydantic models
+│   │   ├── dependencies.py       #   Shared dependencies
+│   │   ├── middleware.py          #   CORS & logging
+│   │   └── routes/               #   6 route modules
+│   │
+│   ├── db/                       # Database layer
+│   │   ├── schema.py             #   SQLite schema (6 tables)
+│   │   └── crud.py               #   CRUD operations
+│   │
+│   └── utils/                    # Shared utilities
+│       ├── config.py             #   Configuration
+│       └── constants.py          #   Constants & paths
+│
+├── frontend/                     # Streamlit dashboard
+│   ├── app.py                    #   Main entry point
+│   ├── assets/
+│   │   └── style.css             #   Neon futuristic theme (900+ lines)
+│   ├── components/
+│   │   ├── charts.py             #   Plotly chart builders
+│   │   ├── layout.py             #   Layout components
+│   │   └── tables.py             #   Table formatters
+│   └── pages/                    #   8 dashboard pages
+│       ├── 1_Overview.py
+│       ├── 2_Feature_Explorer.py
+│       ├── 3_Model_Comparison.py
+│       ├── 4_Explainability.py
+│       ├── 5_Network_Graph.py
+│       ├── 6_Fairness_Audit.py
+│       ├── 7_Account_Inspector.py
+│       └── 8_API_Demo.py
+│
+├── tests/                        # Test suite
+│   ├── test_api/                 #   API endpoint tests
+│   ├── test_data/                #   Data pipeline tests
+│   ├── test_features/            #   Feature computation tests
+│   ├── test_models/              #   Model training tests
+│   └── test_temporal/            #   Temporal detection tests
+│
+├── notebooks/                    # Jupyter notebooks
+│   ├── 01_eda_data_quality.ipynb #   Exploratory data analysis
+│   ├── 05_model_comparison.ipynb #   Model benchmarking
+│   └── 09_submission.ipynb       #   Submission generation
+│
+├── docs/                         # Documentation
+│   ├── architecture.md           #   System architecture
+│   ├── feature_documentation.md  #   Feature descriptions
+│   ├── api_reference.md          #   API documentation
+│   └── interview_prep.md         #   Technical deep-dive notes
+│
+├── docker/                       # Docker configuration
+│   ├── Dockerfile.api            #   API container
+│   ├── Dockerfile.dashboard      #   Dashboard container
+│   └── otel/                     #   OpenTelemetry config
+│
+├── scripts/                      # Utility scripts
+│   └── generate_submission.py    #   Submission file generator
+│
+├── Makefile                      # All pipeline commands
+├── docker-compose.yml            # Container orchestration
+├── pyproject.toml                # Project metadata
+├── requirements.txt              # Python dependencies
+├── LICENSE                       # MIT License
+└── README.md                     # You are here
 ```
 
 ---
 
-## Feature Groups
+## Tech Stack
 
-| Group | Count | Examples |
-|-------|-------|---------|
-| **Velocity** | 10 | `txn_count_7d`, `velocity_acceleration`, `frequency_change_ratio` |
-| **Amount Patterns** | 8 | `structuring_score`, `round_amount_ratio`, `amount_entropy` |
-| **Temporal** | 8 | `dormancy_days`, `burst_after_dormancy`, `unusual_hour_ratio` |
-| **Passthrough** | 7 | `matched_amount_ratio`, `rapid_turnover_score`, `credit_debit_symmetry` |
-| **Graph Network** | 10 | `pagerank`, `betweenness_centrality`, `community_mule_density` |
-| **Profile Mismatch** | 5 | `txn_volume_vs_income`, `product_txn_mismatch` |
-| **KYC Behavioral** | 4 | `mobile_change_flag`, `kyc_completeness` |
-| **Interactions** | 5 | `dormancy_x_burst`, `fanin_x_passthrough_speed` |
-
----
-
-## Models
-
-| Model | Type | Key Strengths |
-|-------|------|---------------|
-| Logistic Regression | Linear | Interpretable baseline, fast inference |
-| Random Forest | Ensemble | Robust to noise, feature importance |
-| XGBoost | Boosting | High accuracy, handles imbalance |
-| LightGBM | Boosting | Fast training, memory efficient |
-| CatBoost | Boosting | Handles categorical features natively |
-| Neural Network | Deep learning | Captures nonlinear interactions (focal loss) |
-
-All models support Optuna tuning, class-weight balancing, and Platt/isotonic calibration.
-
----
-
-## API
-
-Start the API server:
-
-```bash
-make serve
-# or: uvicorn src.api.main:app --reload --port 8000
-```
-
-### Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/health` | Health check |
-| POST | `/api/v1/predict` | Single account prediction |
-| POST | `/api/v1/predict/batch` | Batch predictions |
-
-### Example Request
-
-```bash
-curl -X POST http://localhost:8000/api/v1/predict \
-  -H "Content-Type: application/json" \
-  -d '{"account_id": "ACC001", "features": {"txn_count_7d": 45, "structuring_score": 0.8, ...}}'
-```
-
----
-
-## Dashboard
-
-```bash
-make dashboard
-# or: streamlit run frontend/app.py
-```
-
-Features: model performance plots, feature importance (SHAP), feature registry browser, account risk lookup.
-
----
-
-## Docker Deployment
-
-```bash
-make docker-build    # Build images
-make docker-up       # Start API + dashboard
-make docker-down     # Stop services
-```
-
-Services:
-- **API**: `http://localhost:8000`
-- **Dashboard**: `http://localhost:8501`
+| Layer | Technology |
+|-------|-----------|
+| **Language** | Python 3.10+ |
+| **ML Models** | LightGBM, XGBoost, CatBoost, scikit-learn, PyTorch |
+| **Hyperparameter Tuning** | Optuna (30 trials per model) |
+| **Explainability** | SHAP, Fairlearn |
+| **Feature Engineering** | pandas, NumPy, NetworkX |
+| **API** | FastAPI, Uvicorn, Pydantic |
+| **Dashboard** | Streamlit, Plotly, pyvis |
+| **Database** | SQLite |
+| **Containerization** | Docker, Docker Compose |
+| **Testing** | pytest |
+| **Code Quality** | ruff, black |
 
 ---
 
 ## Testing
 
 ```bash
-make test            # Run all tests
-make test-data       # Data module tests only
-make test-features   # Feature module tests only
-make lint            # Ruff linter
+make test              # Run all tests
+make lint              # Code quality checks with ruff
+make format            # Auto-format with black
 ```
 
----
-
-## Explainability
-
-Every prediction comes with:
-
-1. **SHAP values** — per-feature contribution to the risk score
-2. **Natural language explanations** — human-readable reasons (top-5)
-3. **Fairness audit** — demographic parity & equalized odds via Fairlearn
-4. **Model card** — standardized documentation following Google's framework
-5. **Partial dependence plots** — feature effect visualization
+The test suite covers:
+- Data pipeline integrity (schema validation, merge logic)
+- Feature computation correctness (all 8 groups)
+- Model training and prediction contracts
+- API endpoint responses and error handling
+- Temporal window detection accuracy
 
 ---
 
-## Contributing
+## How It Works (The Short Version)
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+1. **Load** 10 CSV files (customers, accounts, transactions, products, linkage)
+2. **Merge** everything into a unified view per account
+3. **Engineer** 57 features that capture mule behavior patterns
+4. **Train** 6 models with Optuna, pick the best (LightGBM)
+5. **Explain** every prediction with SHAP values
+6. **Audit** for fairness across demographic groups
+7. **Detect** suspicious time windows using z-score anomaly detection
+8. **Serve** predictions via REST API with natural language explanations
+9. **Visualize** everything in an interactive dashboard
 
-## License
+---
 
-[MIT](LICENSE)
+## Acknowledgments
+
+- **Reserve Bank Innovation Hub (RBIH)** — for organizing the hackathon and providing the dataset
+- **IIT Delhi Tryst** — for hosting the competition
+- **The open-source community** — LightGBM, SHAP, FastAPI, Streamlit, and the dozens of libraries that made this possible
+
+---
+
+<p align="center">
+  <strong>Built with purpose. Every mule account detected is a step toward a safer financial system.</strong>
+</p>
+
+<p align="center">
+  <sub>Made by <a href="https://github.com/Arnav-0">Arnav</a></sub>
+</p>
