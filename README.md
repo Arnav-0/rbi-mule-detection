@@ -9,6 +9,10 @@
 <h1 align="center">RBI Mule Account Detection System</h1>
 
 <p align="center">
+  <a href="https://rbi-mule-detection.streamlit.app"><img src="https://img.shields.io/badge/Live_Demo-rbi--mule--detection.streamlit.app-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white" alt="Live Demo"></a>
+</p>
+
+<p align="center">
   <strong>A production-grade machine learning system that identifies mule accounts used for money laundering in Indian banking — built for the Reserve Bank Innovation Hub x IIT Delhi Tryst Hackathon.</strong>
 </p>
 
