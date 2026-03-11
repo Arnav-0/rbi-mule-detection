@@ -36,7 +36,7 @@ FEATURE_REGISTRY = {
     "rapid_turnover_score": {"group": "passthrough", "description": "Score for rapid credit-to-debit turnover", "dtype": "float32", "power": "High"},
     "credit_debit_symmetry": {"group": "passthrough", "description": "Symmetry between credit and debit volumes", "dtype": "float32", "power": "Medium"},
     "max_single_day_volume": {"group": "passthrough", "description": "Maximum total volume in a single day", "dtype": "float32", "power": "Medium"},
-    # GRAPH_NETWORK (10)
+    # GRAPH_NETWORK (9)
     "in_degree": {"group": "graph_network", "description": "Number of unique incoming counterparties", "dtype": "int32", "power": "High"},
     "out_degree": {"group": "graph_network", "description": "Number of unique outgoing counterparties", "dtype": "int32", "power": "High"},
     "fan_in_ratio": {"group": "graph_network", "description": "In-degree relative to total degree", "dtype": "float32", "power": "High"},
@@ -44,7 +44,6 @@ FEATURE_REGISTRY = {
     "betweenness_centrality": {"group": "graph_network", "description": "Betweenness centrality in transaction graph", "dtype": "float32", "power": "High"},
     "pagerank": {"group": "graph_network", "description": "PageRank score in transaction graph", "dtype": "float32", "power": "High"},
     "community_id": {"group": "graph_network", "description": "Community ID from Louvain clustering", "dtype": "int32", "power": "Medium"},
-    "community_mule_density": {"group": "graph_network", "description": "Fraction of mules in same community", "dtype": "float32", "power": "High"},
     "clustering_coefficient": {"group": "graph_network", "description": "Local clustering coefficient", "dtype": "float32", "power": "Medium"},
     "total_counterparties": {"group": "graph_network", "description": "Total unique counterparties", "dtype": "int32", "power": "Medium"},
     # PROFILE_MISMATCH (5)

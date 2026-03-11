@@ -100,7 +100,6 @@ class MuleExplainer:
             'betweenness_centrality': 'acting as an intermediary in the network',
             'fan_in_ratio': 'receiving funds from many sources',
             'fan_out_ratio': 'distributing funds to many destinations',
-            'community_mule_density': 'association with known mule account clusters',
             'unusual_hour_ratio': 'high proportion of after-hours transactions',
             'pct_above_10k': 'frequent high-value transactions',
         }

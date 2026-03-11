@@ -10,13 +10,12 @@ class GraphNetworkFeatureGenerator(BaseFeatureGenerator):
     def __init__(self, labels_df=None):
         super().__init__('graph_network', 'graph_network')
         self.labels_df = labels_df
-        self._community_densities = None
 
     def get_feature_names(self) -> list[str]:
         return [
             'in_degree', 'out_degree', 'fan_in_ratio', 'fan_out_ratio',
             'betweenness_centrality', 'pagerank', 'community_id',
-            'community_mule_density', 'clustering_coefficient', 'total_counterparties',
+            'clustering_coefficient', 'total_counterparties',
         ]
 
     def compute(self, txn, profile=None, cutoff_date=None, **kwargs):
@@ -108,17 +107,6 @@ class GraphNetworkFeatureGenerator(BaseFeatureGenerator):
         for node, val in clustering.items():
             if node in result.index:
                 result.at[node, 'clustering_coefficient'] = val
-
-        # Community mule density (train only)
-        if self.labels_df is not None and len(self.labels_df) > 0:
-            labels = self.labels_df.set_index('account_id')['is_mule'] if 'account_id' in self.labels_df.columns else self.labels_df['is_mule']
-            comm_df = pd.DataFrame({'community_id': communities}).rename_axis('account_id')
-            comm_df = comm_df.join(labels, how='left')
-            density = comm_df.groupby('community_id')['is_mule'].mean()
-            self._community_densities = density.to_dict()
-            for node in result.index:
-                comm = result.at[node, 'community_id']
-                result.at[node, 'community_mule_density'] = self._community_densities.get(comm, 0)
 
         result = result.fillna(0)
         self.validate_output(result)

@@ -1,227 +1,227 @@
 {
   "ACCT_001266": {
     "top_features": {
-      "structuring_score_broad": {
-        "shap_value": -0.5159881523347475,
-        "feature_value": 0.03125
-      },
       "pct_above_10k": {
-        "shap_value": -0.43735074639937327,
+        "shap_value": -0.6190142267775566,
         "feature_value": 0.109375
       },
-      "net_flow_ratio": {
-        "shap_value": 0.3259854984333125,
-        "feature_value": 0.953323245048523
+      "round_amount_ratio": {
+        "shap_value": -0.3397742686194721,
+        "feature_value": 0.1875
       },
-      "weekend_ratio": {
-        "shap_value": 0.31211352672997045,
-        "feature_value": 0.25
-      },
-      "amount_concentration": {
-        "shap_value": 0.30506417999476193,
-        "feature_value": 0.7802648347502879
+      "betweenness_centrality": {
+        "shap_value": 0.2674485580149375,
+        "feature_value": 7.858730976466173e-05
       },
       "structuring_score": {
-        "shap_value": 0.3039979482640456,
+        "shap_value": 0.22874450205454988,
         "feature_value": 0.03125
       },
       "txn_amount_mean_30d": {
-        "shap_value": 0.2945643662400023,
+        "shap_value": 0.18922832991481073,
+        "feature_value": 0.0
+      },
+      "txn_volume_vs_income": {
+        "shap_value": 0.18551333793397656,
         "feature_value": 0.0
       },
       "avg_txn_vs_balance": {
-        "shap_value": 0.28705774841778314,
+        "shap_value": 0.18545373692921335,
         "feature_value": 0.0
       },
-      "round_x_structuring": {
-        "shap_value": 0.2627823235201421,
-        "feature_value": 0.005859375
+      "net_flow_ratio": {
+        "shap_value": 0.17440535122681347,
+        "feature_value": 0.953323245048523
       },
-      "in_degree": {
-        "shap_value": 0.1928771368397376,
-        "feature_value": 16.0
+      "pagerank": {
+        "shap_value": -0.14987395052290658,
+        "feature_value": 1.472451265067357e-05
+      },
+      "max_single_day_volume": {
+        "shap_value": -0.1317515553467949,
+        "feature_value": 58981.9609375
       }
     },
-    "natural_language": "This account was flagged due to: net flow ratio, weekend ratio, amount concentration."
+    "natural_language": "This account was flagged due to: acting as an intermediary in the network, transactions just below reporting thresholds, txn amount mean 30d."
   },
   "ACCT_001332": {
     "top_features": {
-      "days_to_first_txn": {
-        "shap_value": 1.741321560996216,
-        "feature_value": -845.0
-      },
       "pct_above_10k": {
-        "shap_value": 1.5159628409251076,
+        "shap_value": 0.42612271550627784,
         "feature_value": 0.4722222222222222
       },
-      "round_x_structuring": {
-        "shap_value": 0.744764845968437,
-        "feature_value": 0.0015432098765432098
+      "structuring_score": {
+        "shap_value": 0.3018565277455585,
+        "feature_value": 0.013888888888888888
       },
-      "round_amount_ratio": {
-        "shap_value": 0.708336638802776,
-        "feature_value": 0.1111111111111111
+      "structuring_score_broad": {
+        "shap_value": 0.25461121340721565,
+        "feature_value": 0.05555555555555555
       },
-      "total_counterparties": {
-        "shap_value": 0.559255946209326,
-        "feature_value": 34.0
+      "amount_entropy": {
+        "shap_value": 0.22172268931869227,
+        "feature_value": 1.6666208465336698
       },
-      "fanin_x_passthrough_speed": {
-        "shap_value": 0.4116865536731819,
-        "feature_value": 0.001827373193862881
+      "betweenness_centrality": {
+        "shap_value": 0.2118000327151737,
+        "feature_value": 9.387235600055663e-05
       },
-      "max_gap_days": {
-        "shap_value": 0.3278531570914761,
-        "feature_value": 118.0
+      "max_single_day_volume": {
+        "shap_value": 0.20750652377791057,
+        "feature_value": 222969.296875
       },
-      "net_flow_ratio": {
-        "shap_value": 0.32387435687973737,
-        "feature_value": 0.7558095455169678
+      "txn_amount_mean_30d": {
+        "shap_value": -0.19831818459219444,
+        "feature_value": 44224.8515625
       },
-      "dormancy_days": {
-        "shap_value": 0.2889386120243485,
-        "feature_value": 118.0
+      "txn_amount_std_30d": {
+        "shap_value": -0.17566346980730912,
+        "feature_value": 33374.201178521034
       },
-      "credit_debit_time_delta_min": {
-        "shap_value": 0.23940708663056964,
-        "feature_value": 3.0
+      "balance_volatility": {
+        "shap_value": 0.16727550860329826,
+        "feature_value": 0.39004269276328
+      },
+      "weekend_ratio": {
+        "shap_value": 0.16636619965239582,
+        "feature_value": 0.2222222222222222
       }
     },
-    "natural_language": "This account was flagged due to: days to first txn, frequent high-value transactions, round x structuring, high proportion of round-amount transactions, total counterparties."
+    "natural_language": "This account was flagged due to: frequent high-value transactions, transactions just below reporting thresholds, structuring score broad, amount entropy, acting as an intermediary in the network."
   },
   "ACCT_001428": {
     "top_features": {
-      "pagerank": {
-        "shap_value": 1.5130256272413614,
-        "feature_value": 6.044879509198023e-05
-      },
       "pct_above_10k": {
-        "shap_value": 1.2289230643528368,
+        "shap_value": 0.4610262815571729,
         "feature_value": 0.825
       },
+      "rapid_turnover_score": {
+        "shap_value": 0.3778643065412796,
+        "feature_value": 0.9061325192451477
+      },
       "round_amount_ratio": {
-        "shap_value": 0.5594755606233383,
+        "shap_value": 0.3574312760729328,
         "feature_value": 0.025
       },
-      "max_gap_days": {
-        "shap_value": 0.46487297129189165,
-        "feature_value": 122.0
-      },
       "amount_concentration": {
-        "shap_value": 0.44105301965210947,
+        "shap_value": 0.3323089936468642,
         "feature_value": 0.4157083658656615
       },
-      "matched_amount_ratio": {
-        "shap_value": 0.38377493268231955,
-        "feature_value": 0.7894736842105263
+      "max_single_day_volume": {
+        "shap_value": 0.31956278207971234,
+        "feature_value": 602351.75
       },
-      "net_flow_ratio": {
-        "shap_value": 0.3003284995008861,
-        "feature_value": 1.0369873046875
+      "fanin_x_passthrough_speed": {
+        "shap_value": 0.28653671170330447,
+        "feature_value": 0.32926829268292684
       },
-      "txn_count_90d": {
-        "shap_value": 0.2577308812160973,
+      "linked_account_count": {
+        "shap_value": 0.27814061488141234,
+        "feature_value": 2.0
+      },
+      "structuring_score": {
+        "shap_value": 0.2615354646800487,
+        "feature_value": 0.025
+      },
+      "txn_amount_mean_30d": {
+        "shap_value": 0.252684964027404,
         "feature_value": 0.0
       },
-      "credit_debit_time_delta_median": {
-        "shap_value": 0.24686807682073267,
-        "feature_value": 2.7333333333333334
-      },
-      "total_counterparties": {
-        "shap_value": 0.24167495143175868,
-        "feature_value": 38.0
+      "betweenness_centrality": {
+        "shap_value": 0.23724147332554812,
+        "feature_value": 8.046052896066794e-05
       }
     },
-    "natural_language": "This account was flagged due to: high importance in the transaction network, frequent high-value transactions, high proportion of round-amount transactions, max gap days, amount concentration."
+    "natural_language": "This account was flagged due to: frequent high-value transactions, rapid fund pass-through behavior, high proportion of round-amount transactions, amount concentration, max single day volume."
   },
   "ACCT_001877": {
     "top_features": {
-      "pagerank": {
-        "shap_value": 0.6016889173837695,
-        "feature_value": 1.2803951790196861e-05
+      "balance_volatility": {
+        "shap_value": 0.2683632256065899,
+        "feature_value": 0.3168072898270407
+      },
+      "txn_amount_mean_30d": {
+        "shap_value": -0.23265669361580923,
+        "feature_value": 9948.89453125
+      },
+      "structuring_score_broad": {
+        "shap_value": -0.21262439451332596,
+        "feature_value": 0.0
+      },
+      "monthly_txn_cv": {
+        "shap_value": 0.18177972552966318,
+        "feature_value": 1.7441466294324126
       },
       "amount_skewness": {
-        "shap_value": 0.44756635576672216,
+        "shap_value": 0.17665401892958477,
         "feature_value": 3.8429107666015625
       },
-      "net_flow_ratio": {
-        "shap_value": 0.3961941030098674,
-        "feature_value": 2.1267249584198
-      },
-      "avg_txn_vs_balance": {
-        "shap_value": 0.3922224881529107,
-        "feature_value": 0.0012303949172808068
+      "credit_debit_time_delta_min": {
+        "shap_value": 0.16770827671033584,
+        "feature_value": 1.7183333333333333
       },
       "amount_concentration": {
-        "shap_value": 0.3677302135395984,
+        "shap_value": 0.1617205072335916,
         "feature_value": 0.7888707839564761
       },
+      "frequency_change_ratio": {
+        "shap_value": -0.1535075027590451,
+        "feature_value": 1.2
+      },
       "round_amount_ratio": {
-        "shap_value": 0.36051260719457334,
+        "shap_value": 0.13048460927463004,
         "feature_value": 0.16279069767441862
       },
-      "max_gap_days": {
-        "shap_value": 0.25729043272715335,
-        "feature_value": 91.0
-      },
-      "weekend_ratio": {
-        "shap_value": 0.2565641226873164,
-        "feature_value": 0.11627906976744186
-      },
-      "dormancy_x_burst": {
-        "shap_value": 0.2554657110949543,
-        "feature_value": 91.0
-      },
-      "betweenness_centrality": {
-        "shap_value": 0.23054201172155492,
-        "feature_value": 5.8262056310607645e-05
+      "fan_in_ratio": {
+        "shap_value": 0.1224806329598279,
+        "feature_value": 0.6923076923076923
       }
     },
-    "natural_language": "This account was flagged due to: high importance in the transaction network, amount skewness, net flow ratio, avg txn vs balance, amount concentration."
+    "natural_language": "This account was flagged due to: balance volatility, monthly txn cv, amount skewness."
   },
   "ACCT_002041": {
     "top_features": {
+      "dormancy_days": {
+        "shap_value": -0.33954021343171864,
+        "feature_value": 125.0
+      },
+      "structuring_score": {
+        "shap_value": 0.3193170750909414,
+        "feature_value": 0.3103448275862069
+      },
       "pct_above_10k": {
-        "shap_value": 1.1239351239536448,
+        "shap_value": 0.283290986464235,
         "feature_value": 0.3620689655172414
       },
-      "txn_count_90d": {
-        "shap_value": 0.6721755623151634,
-        "feature_value": 0.0
+      "betweenness_centrality": {
+        "shap_value": 0.28313127868586896,
+        "feature_value": 7.467648321792459e-05
       },
-      "pagerank": {
-        "shap_value": 0.5921751728325263,
-        "feature_value": 2.7826889790544038e-05
+      "monthly_txn_cv": {
+        "shap_value": -0.25520450693284286,
+        "feature_value": 1.2771961370085678
       },
-      "total_counterparties": {
-        "shap_value": 0.5915338723623368,
-        "feature_value": 36.0
+      "round_x_structuring": {
+        "shap_value": -0.24779643216473785,
+        "feature_value": 0.04280618311533888
       },
-      "round_amount_ratio": {
-        "shap_value": 0.5439978363210611,
-        "feature_value": 0.13793103448275862
-      },
-      "fanin_x_passthrough_speed": {
-        "shap_value": 0.36618006224600524,
-        "feature_value": 0.0011785523527859316
-      },
-      "net_flow_ratio": {
-        "shap_value": 0.3479116178474943,
-        "feature_value": 1.2150532007217407
+      "structuring_score_broad": {
+        "shap_value": 0.24599900203119335,
+        "feature_value": 0.3103448275862069
       },
       "amount_concentration": {
-        "shap_value": 0.31579676874327517,
+        "shap_value": 0.24348065417607165,
         "feature_value": 0.629499212000205
       },
-      "betweenness_centrality": {
-        "shap_value": 0.28687283736455066,
-        "feature_value": 7.497902875455169e-05
+      "net_flow_ratio": {
+        "shap_value": 0.23119448874566048,
+        "feature_value": 1.2150532007217407
       },
-      "credit_debit_time_delta_min": {
-        "shap_value": 0.26518243632236577,
-        "feature_value": 14.38861111111111
+      "amount_kurtosis": {
+        "shap_value": -0.19423758940182062,
+        "feature_value": -1.425978183746338
       }
     },
-    "natural_language": "This account was flagged due to: frequent high-value transactions, txn count 90d, high importance in the transaction network, total counterparties, high proportion of round-amount transactions."
+    "natural_language": "This account was flagged due to: transactions just below reporting thresholds, frequent high-value transactions, acting as an intermediary in the network."
   }
 }

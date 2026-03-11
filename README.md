@@ -1,6 +1,6 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python">
-  <img src="https://img.shields.io/badge/LightGBM-AUC_0.989-00C853?style=for-the-badge&logo=microsoft&logoColor=white" alt="LightGBM">
+  <img src="https://img.shields.io/badge/CatBoost-AUC_0.925-00C853?style=for-the-badge&logo=catboost&logoColor=white" alt="CatBoost">
   <img src="https://img.shields.io/badge/FastAPI-13_Endpoints-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI">
   <img src="https://img.shields.io/badge/Streamlit-8_Pages-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white" alt="Streamlit">
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker">
@@ -24,7 +24,7 @@ Money mules are people who — knowingly or unknowingly — allow their bank acc
 
 India's banking system processes **billions of transactions daily**. Manually reviewing accounts is impossible. Traditional rule-based systems generate too many false positives. We need something smarter.
 
-**This system uses machine learning to automatically detect mule accounts** by analyzing transaction patterns, network behavior, and account profiles — achieving a **98.9% AUC-ROC** while maintaining interpretability through SHAP explanations and fairness auditing.
+**This system uses machine learning to automatically detect mule accounts** by analyzing transaction patterns, network behavior, and account profiles — achieving a **92.5% AUC-ROC** (validated with 5-fold stratified cross-validation) while maintaining interpretability through SHAP explanations and fairness auditing.
 
 ---
 
@@ -32,8 +32,8 @@ India's banking system processes **billions of transactions daily**. Manually re
 
 This isn't just a model in a notebook. It's a **complete, deployable system**:
 
-- **57 engineered features** derived from 12 known mule behavior patterns (rapid fund cycling, structuring, dormancy-burst, etc.)
-- **6 models benchmarked** with Optuna hyperparameter tuning — LightGBM wins with 0.989 AUC-ROC
+- **56 engineered features** derived from 12 known mule behavior patterns (rapid fund cycling, structuring, dormancy-burst, etc.)
+- **6 models benchmarked** with Optuna + 5-fold stratified CV — CatBoost wins with 0.925 AUC-ROC
 - **Temporal detection** — not just *who* is a mule, but *when* the suspicious activity happened
 - **Real-time scoring** via FastAPI with SHAP explanations for every prediction
 - **Fairness auditing** built in — we check for bias across demographics before deployment
@@ -44,27 +44,28 @@ This isn't just a model in a notebook. It's a **complete, deployable system**:
 
 ## Key Results
 
+All metrics are **5-fold stratified cross-validation** averages (mean +/- std) — no data leakage, no lucky splits.
+
 | Metric | Score |
 |--------|-------|
-| **AUC-ROC** | **0.9889** |
-| **AUC-PR** | **0.8685** |
-| **Recall** | **0.8868** |
-| **F1 Score** | **0.5802** |
-| **Precision** | **0.4312** |
-| **Accuracy** | **0.9858** |
+| **AUC-ROC** | **0.9253 +/- 0.017** |
+| **AUC-PR** | **0.4269 +/- 0.026** |
+| **F1 Score** | **0.4741 +/- 0.025** |
+| **Precision** | **0.4992 +/- 0.077** |
+| **Recall** | **0.4791 +/- 0.101** |
 
-> The model catches **88.7% of all mule accounts** while keeping false positives manageable — critical for a system that affects real people's bank accounts.
+> The model achieves strong class separation (AUC-ROC > 0.92) on a highly imbalanced dataset (1.09% mule rate) — critical for a system that affects real people's bank accounts.
 
-### Model Comparison
+### Model Comparison (5-Fold Stratified CV)
 
 | Model | AUC-ROC | AUC-PR | F1 | Notes |
 |-------|---------|--------|-----|-------|
-| Logistic Regression | 0.8278 | 0.3458 | 0.4421 | Baseline, interpretable |
-| Random Forest | 0.9052 | 0.4626 | 0.5000 | Solid ensemble |
-| XGBoost | 0.9097 | 0.4568 | 0.5111 | Competitive |
-| **LightGBM** | **0.9889** | **0.8685** | **0.5802** | **Best performer** |
-| CatBoost | 0.9109 | 0.4587 | 0.4779 | Handles categoricals well |
-| Neural Network | 0.8638 | 0.4412 | 0.5238 | PyTorch, 3-layer MLP |
+| **CatBoost** | **0.9253 +/- 0.017** | **0.4269 +/- 0.026** | **0.4741 +/- 0.025** | **Best performer** |
+| LightGBM | 0.9187 +/- 0.008 | 0.4269 +/- 0.120 | 0.4952 +/- 0.107 | Most consistent (lowest std) |
+| Random Forest | 0.9181 +/- 0.024 | 0.4719 +/- 0.045 | 0.4983 +/- 0.043 | Solid ensemble |
+| XGBoost | 0.8949 +/- 0.022 | 0.5088 +/- 0.057 | 0.5906 +/- 0.047 | Best F1 score |
+| Neural Network | 0.8813 +/- 0.020 | 0.3195 +/- 0.089 | 0.4051 +/- 0.123 | PyTorch MLP |
+| Logistic Regression | 0.8758 +/- 0.018 | 0.2895 +/- 0.069 | 0.3873 +/- 0.070 | Baseline, interpretable |
 
 ---
 
@@ -81,8 +82,8 @@ The system follows a clean pipeline architecture — each stage is independently
   ┌─────────────┐           ┌─────────────────┐         ┌─────────────────┐
   │  10 CSV     │           │  8 Feature      │         │  6 Models       │
   │  Files      │──Clean──▶ │  Groups         │──Fit──▶ │  + Optuna       │
-  │  7.4M txns  │  Merge    │  57 Features    │  Tune   │  LightGBM best  │
-  │  40K accts  │  Validate │  Registry-based │         │  0.989 AUC-ROC  │
+  │  7.4M txns  │  Merge    │  56 Features    │  Tune   │  CatBoost best  │
+  │  40K accts  │  Validate │  Registry-based │         │  0.925 AUC-ROC  │
   └─────────────┘           └─────────────────┘         └────────┬────────┘
                                                                  │
                                     ┌────────────────────────────┤
@@ -110,7 +111,7 @@ The system follows a clean pipeline architecture — each stage is independently
 
 ## Feature Engineering
 
-The heart of the system. We engineered **57 features** across **8 groups**, each inspired by real mule account behaviors documented in AML research:
+The heart of the system. We engineered **56 features** across **8 groups**, each inspired by real mule account behaviors documented in AML research:
 
 ### Feature Groups
 
@@ -120,14 +121,14 @@ The heart of the system. We engineered **57 features** across **8 groups**, each
 | **Amount Patterns** | 8 | Round amounts, structuring scores, amount entropy, skewness | Laundered money often comes in suspiciously round numbers or just below reporting thresholds |
 | **Temporal** | 8 | Dormancy periods, burst detection, night/weekend ratios, monthly CV | Mule accounts are often dormant for months, then explode with activity at odd hours |
 | **Pass-Through** | 7 | Credit-debit matching, rapid turnover, net flow ratio | The hallmark of a mule: money in, money out, fast — the account is just a pipe |
-| **Graph/Network** | 10 | PageRank, betweenness centrality, community mule density, fan-in/out | Mules sit at the center of suspicious networks — graph features catch what transaction-level features miss |
+| **Graph/Network** | 9 | PageRank, betweenness centrality, community detection, fan-in/out | Mules sit at the center of suspicious networks — graph features catch what transaction-level features miss |
 | **Profile Mismatch** | 5 | Volume vs balance, account age vs activity, product mismatch score | A 19-year-old student account suddenly processing millions? Something's wrong |
 | **KYC Behavioral** | 4 | Mobile change spikes, KYC completeness, linked accounts anomaly | Frequent contact info changes and incomplete KYC are red flags |
 | **Interactions** | 5 | Cross-group multiplicative features (dormancy x burst, pass-through x velocity) | The most powerful signals come from combining: a dormant account that suddenly bursts AND shows pass-through behavior is almost certainly a mule |
 
 ### Real-Time Feature Computation
 
-The system can compute all 57 features **on-the-fly** for any account — even ones not in the training set. Upload a CSV of transactions and get instant risk scores through the dashboard or API.
+The system can compute all 56 features **on-the-fly** for any account — even ones not in the training set. Upload a CSV of transactions and get instant risk scores through the dashboard or API.
 
 ---
 
@@ -230,7 +231,7 @@ This runs everything: data validation → feature engineering → model training
 # 1. Validate raw data files
 make validate
 
-# 2. Engineer 57 features for all 40K accounts
+# 2. Engineer 56 features for all 40K accounts
 make features
 
 # 3. Train 6 models with Optuna hyperparameter tuning
@@ -309,7 +310,7 @@ rbi-mule-detection/
 │   │   ├── amount_patterns.py    #   Amount pattern features (8)
 │   │   ├── temporal.py           #   Temporal features (8)
 │   │   ├── passthrough.py        #   Pass-through features (7)
-│   │   ├── graph_network.py      #   Network/graph features (10)
+│   │   ├── graph_network.py      #   Network/graph features (9)
 │   │   ├── profile_mismatch.py   #   Profile mismatch features (5)
 │   │   ├── kyc_behavioral.py     #   KYC behavioral features (4)
 │   │   └── interactions.py       #   Interaction features (5)
@@ -320,7 +321,7 @@ rbi-mule-detection/
 │   │   ├── logistic.py           #   Logistic Regression
 │   │   ├── random_forest.py      #   Random Forest
 │   │   ├── xgboost_model.py      #   XGBoost
-│   │   ├── lightgbm_model.py     #   LightGBM (best)
+│   │   ├── lightgbm_model.py     #   LightGBM
 │   │   ├── catboost_model.py     #   CatBoost
 │   │   └── neural_net.py         #   PyTorch MLP
 │   │
@@ -409,7 +410,7 @@ rbi-mule-detection/
 |-------|-----------|
 | **Language** | Python 3.10+ |
 | **ML Models** | LightGBM, XGBoost, CatBoost, scikit-learn, PyTorch |
-| **Hyperparameter Tuning** | Optuna (30 trials per model) |
+| **Hyperparameter Tuning** | Optuna (50 trials per model) + 5-fold stratified CV |
 | **Explainability** | SHAP, Fairlearn |
 | **Feature Engineering** | pandas, NumPy, NetworkX |
 | **API** | FastAPI, Uvicorn, Pydantic |
@@ -442,8 +443,8 @@ The test suite covers:
 
 1. **Load** 10 CSV files (customers, accounts, transactions, products, linkage)
 2. **Merge** everything into a unified view per account
-3. **Engineer** 57 features that capture mule behavior patterns
-4. **Train** 6 models with Optuna, pick the best (LightGBM)
+3. **Engineer** 56 features that capture mule behavior patterns
+4. **Train** 6 models with Optuna + 5-fold stratified CV, pick the best (CatBoost)
 5. **Explain** every prediction with SHAP values
 6. **Audit** for fairness across demographic groups
 7. **Detect** suspicious time windows using z-score anomaly detection

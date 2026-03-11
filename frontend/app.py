@@ -23,8 +23,9 @@ if css_path.exists():
 def get_live_stats():
     processed = Path("data/processed")
     raw = Path("data/raw")
-    stats = {"accounts": "40,038", "features": "57", "models": "6",
-             "transactions": "7.4M", "mule_rate": "1.09%", "auc": "0.9889"}
+    stats = {"accounts": "40,038", "features": "56", "models": "6",
+             "transactions": "7.4M", "mule_rate": "1.09%", "auc": "N/A",
+             "best_model": "N/A", "validation": "5-fold CV"}
     for name in ["features_matrix.parquet", "feature_matrix.parquet"]:
         path = processed / name
         if path.exists():
@@ -38,11 +39,20 @@ def get_live_stats():
         rate = labels["is_mule"].mean() * 100
         stats["mule_rate"] = f"{rate:.2f}%"
     import json
-    report_path = Path("outputs/reports/lightgbm_report.json")
-    if report_path.exists():
-        report = json.loads(report_path.read_text(encoding='utf-8'))
-        metrics = report.get("metrics", {})
-        stats["auc"] = f"{metrics.get('auc_roc', 0):.4f}"
+    bench_path = Path("outputs/reports/benchmark_results.json")
+    if bench_path.exists():
+        bench = json.loads(bench_path.read_text(encoding='utf-8'))
+        if isinstance(bench, dict) and bench:
+            best_name = max(bench.keys(),
+                           key=lambda k: bench[k].get("metrics", {}).get("auc_roc", 0))
+            best_metrics = bench[best_name].get("metrics", {})
+            auc = best_metrics.get("auc_roc", 0)
+            std = bench[best_name].get("cv_std", {}).get("auc_roc", 0)
+            if std > 0:
+                stats["auc"] = f"{auc:.4f} +/- {std:.4f}"
+            else:
+                stats["auc"] = f"{auc:.4f}"
+            stats["best_model"] = best_name
     return stats
 
 
@@ -100,8 +110,8 @@ st.markdown("")
 
 _steps = [
     ("1", "Raw Data", "10 CSV files", False),
-    ("2", "Features", "57 engineered", False),
-    ("3", "Model", "LightGBM AUC 0.99", True),
+    ("2", "Features", f"{live['features']} engineered", False),
+    ("3", "Model", f"Best: {live['best_model']}", True),
     ("4", "Predictions", "16K test accounts", False),
     ("5", "Explain", "SHAP + Fairness", False),
 ]
@@ -137,8 +147,8 @@ st.markdown("")
 row1 = st.columns(4)
 pages = [
     ("&#128202;", "Overview", "Dataset statistics, distributions, transaction volume trends"),
-    ("&#128300;", "Feature Explorer", "57 features across 8 groups with SHAP importance"),
-    ("&#127942;", "Model Comparison", "ROC/PR curves, confusion matrices, AUC benchmarks"),
+    ("&#128300;", "Feature Explorer", f"{live['features']} features across 8 groups with SHAP importance"),
+    ("&#127942;", "Model Comparison", "ROC/PR curves, confusion matrices, CV benchmarks"),
     ("&#129504;", "Explainability", "Global SHAP, per-account waterfall, beeswarm plots"),
 ]
 for i, (icon, title, desc) in enumerate(pages):
@@ -176,8 +186,8 @@ st.markdown("")
 
 _arch = [
     ("&#128229;", "Data Pipeline", "10 raw CSVs &rarr; schema validation &rarr; merge &rarr; clean"),
-    ("&#9881;", "Feature Engineering", "8 generators &rarr; 57 features &rarr; registry &rarr; parquet"),
-    ("&#129504;", "Model Training", "6 models &rarr; Optuna tuning &rarr; LightGBM best"),
+    ("&#9881;", "Feature Engineering", f"8 generators &rarr; {live['features']} features &rarr; registry &rarr; parquet"),
+    ("&#129504;", "Model Training", f"6 models &rarr; Optuna + 5-fold CV &rarr; {live['best_model']} best"),
     ("&#128300;", "Explainability", "SHAP TreeExplainer &rarr; per-account &rarr; NL text"),
     ("&#9201;", "Temporal Detection", "Z-score anomaly &rarr; suspicious windows &rarr; IoU"),
     ("&#128640;", "Serving", "FastAPI 13 endpoints &rarr; SQLite &rarr; Dashboard"),
@@ -330,13 +340,13 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
     st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
-    st.markdown("""
-**Model:** LightGBM (AUC 0.99)
-**Features:** 57 engineered
+    st.markdown(f"""
+**Model:** {live['best_model']}
+**AUC:** {live['auc']}
+**Features:** {live['features']} engineered
+**Validation:** {live['validation']}
 **Explain:** SHAP TreeExplainer
-**Fairness:** Demographic audit
 **API:** FastAPI + SQLite
-**UI:** Streamlit + Plotly
     """)
     st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
     st.caption("Reserve Bank of India Innovation Hub")

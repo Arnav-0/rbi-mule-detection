@@ -1,6 +1,6 @@
 """Real-time feature computation for a single account from raw transaction data.
 
-Computes all 57 features on the fly so predictions can run on accounts
+Computes all 56 features on the fly so predictions can run on accounts
 outside the pre-built feature matrix.
 """
 
@@ -16,7 +16,7 @@ def compute_features_realtime(
     avg_balance: float = 0.0,
     cutoff_date=None,
 ) -> pd.DataFrame:
-    """Compute all 57 features for a single account from raw transactions.
+    """Compute all 56 features for a single account from raw transactions.
 
     Parameters
     ----------
@@ -35,7 +35,7 @@ def compute_features_realtime(
 
     Returns
     -------
-    DataFrame with 1 row (account_id index) and 57 feature columns.
+    DataFrame with 1 row (account_id index) and 56 feature columns.
     """
     txn = txn_df.copy()
 
@@ -218,7 +218,7 @@ def compute_features_realtime(
             result["rapid_turnover_score"] = rapid_amount / max(sum_credits, 1)
 
     # ═══════════════════════════════════════
-    # GRAPH NETWORK (10 features) — simplified for single account
+    # GRAPH NETWORK (9 features) — simplified for single account
     # ═══════════════════════════════════════
     if "counterparty_id" in txn.columns:
         cp = txn.dropna(subset=["counterparty_id"])
@@ -237,7 +237,6 @@ def compute_features_realtime(
     result["betweenness_centrality"] = 0.0
     result["pagerank"] = 0.0
     result["community_id"] = 0
-    result["community_mule_density"] = 0.0
     result["clustering_coefficient"] = 0.0
 
     # ═══════════════════════════════════════

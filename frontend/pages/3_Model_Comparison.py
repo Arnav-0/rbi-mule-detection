@@ -27,9 +27,9 @@ page_header(
 )
 
 pipeline_flow([
-    ("⚙️", "57 Features", "Engineered", "cyan"),
+    ("⚙️", "56 Features", "Engineered", "cyan"),
     ("🧠", "6 Models", "LR, RF, XGB, LGBM...", "purple"),
-    ("🎯", "Optuna Tuning", "Hyperparameters", "magenta"),
+    ("🎯", "Optuna + 5-Fold CV", "Hyperparameters", "magenta"),
     ("🏆", "Evaluation", "You are here", "yellow"),
 ], highlight=3)
 
@@ -91,12 +91,23 @@ if reports:
     # Canonical display names
     display_names = {m: reports[m].get("model_type", m) for m in model_names}
 
-    info_callout(
-        "How to read this page",
-        "Each model was trained on the same data and evaluated on the same held-out set. "
-        "AUC-ROC measures overall discrimination, AUC-PR is better for rare events like mule accounts, "
-        "and F1 balances precision (avoiding false alarms) with recall (catching real mules)."
-    )
+    # Check if CV validation was used
+    any_cv = any(reports[m].get("n_folds") or reports[m].get("cv_std") for m in model_names)
+    if any_cv:
+        info_callout(
+            "How to read this page",
+            "Each model was trained with stratified 5-fold cross-validation and Optuna tuning. "
+            "Metrics shown are mean values across folds. AUC-ROC measures overall discrimination, "
+            "AUC-PR is better for rare events like mule accounts, "
+            "and F1 balances precision (avoiding false alarms) with recall (catching real mules)."
+        )
+    else:
+        info_callout(
+            "How to read this page",
+            "Each model was trained on the same data and evaluated on a held-out set. "
+            "AUC-ROC measures overall discrimination, AUC-PR is better for rare events like mule accounts, "
+            "and F1 balances precision (avoiding false alarms) with recall (catching real mules)."
+        )
 
     # --- Summary Metrics Row ---
     best_model_name = max(model_names, key=lambda m: get_metric(reports[m], "auc_roc", "roc_auc"))
@@ -138,11 +149,22 @@ if reports:
     if not comp_df.empty:
         st.dataframe(highlight_best_model(comp_df), use_container_width=True, height=280)
         best = comp_df.iloc[0]
-        st.success(
-            f"**Best Model: {best['Model']}** — AUC-ROC: {best['AUC-ROC']:.4f}, "
-            f"AUC-PR: {best['AUC-PR']:.4f}, F1: {best['F1 Score']:.4f}, "
-            f"Recall: {best['Recall']:.1%}"
-        )
+        best_key = max(model_names, key=lambda m: get_metric(reports[m], "auc_roc", "roc_auc"))
+        cv_std = reports[best_key].get("cv_std", {})
+        if cv_std:
+            auc_std = cv_std.get("auc_roc", 0)
+            st.success(
+                f"**Best Model: {best['Model']}** — AUC-ROC: {best['AUC-ROC']:.4f} +/- {auc_std:.4f}, "
+                f"AUC-PR: {best['AUC-PR']:.4f} +/- {cv_std.get('auc_pr', 0):.4f}, "
+                f"F1: {best['F1 Score']:.4f} +/- {cv_std.get('f1_score', 0):.4f}  "
+                f"(5-fold stratified CV)"
+            )
+        else:
+            st.success(
+                f"**Best Model: {best['Model']}** — AUC-ROC: {best['AUC-ROC']:.4f}, "
+                f"AUC-PR: {best['AUC-PR']:.4f}, F1: {best['F1 Score']:.4f}, "
+                f"Recall: {best['Recall']:.1%}"
+            )
 
     st.markdown("")
 
@@ -249,9 +271,13 @@ if reports:
 
                     # Training info
                     n_train = data.get("n_train", 0)
-                    n_val = data.get("n_val", 0)
-                    if n_train:
-                        st.caption(f"Train: {n_train:,} | Val: {n_val:,} | Mule rate: {data.get('val_mule_rate', 0.011):.2%}")
+                    n_folds = data.get("n_folds", 0)
+                    validation_str = data.get("validation", "")
+                    if n_train and validation_str:
+                        st.caption(f"Train: {n_train:,} | Validation: {validation_str}")
+                    elif n_train:
+                        n_val = data.get("n_val", 0)
+                        st.caption(f"Train: {n_train:,} | Val: {n_val:,}")
 
                     st.markdown("")
 
@@ -451,7 +477,8 @@ if reports:
         section("Hyperparameters")
         info_callout(
             "Tuning details",
-            "Each model was tuned with Optuna (30 trials). Below are the best hyperparameters found for each model."
+            "Each model was tuned with Optuna across 5-fold stratified CV. "
+            "Below are the best hyperparameters found (from the best-scoring fold)."
         )
 
         sorted_models_hp = sorted(model_names, key=lambda m: get_metric(reports[m], "auc_roc", "roc_auc"), reverse=True)

@@ -32,7 +32,7 @@ class FeaturePipeline:
 
         # Stage 3: Graph (expensive, can skip)
         if not self.skip_graph:
-            graph = GraphNetworkFeatureGenerator(labels_df=labels).compute(txn, profile, self.cutoff)
+            graph = GraphNetworkFeatureGenerator().compute(txn, profile, self.cutoff)
         else:
             graph = pd.DataFrame(
                 0.0, index=velocity.index,

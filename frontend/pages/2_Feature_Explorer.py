@@ -20,14 +20,14 @@ from src.features.registry import FEATURE_REGISTRY, get_features_by_group
 st.set_page_config(page_title="Features | RBI Mule Detection", page_icon="🔬", layout="wide")
 page_header(
     "Feature Explorer",
-    "Analyze the 57 engineered features that power mule detection — see how each separates mule from legitimate accounts"
+    "Analyze the 56 engineered features that power mule detection — see how each separates mule from legitimate accounts"
 )
 
 pipeline_flow([
     ("📁", "Raw Data", "10 CSV files", "cyan"),
     ("🔄", "8 Generators", "Txn, balance, time...", "purple"),
-    ("⚙️", "57 Features", "You are here", "yellow"),
-    ("🧠", "Model Input", "LightGBM + others", "magenta"),
+    ("⚙️", "56 Features", "You are here", "yellow"),
+    ("🧠", "Model Input", "Best model", "magenta"),
 ], highlight=2)
 
 PROCESSED_DIR = Path("data/processed")

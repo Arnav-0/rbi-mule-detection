@@ -22,7 +22,7 @@ page_header("Dataset Overview", "Statistics, class distribution, transaction vol
 pipeline_flow([
     ("📁", "Raw Data", "10 CSV files", "cyan"),
     ("🔄", "Merge & Clean", "Validate schema", "purple"),
-    ("⚙️", "Feature Eng.", "57 features", "magenta"),
+    ("⚙️", "Feature Eng.", "56 features", "magenta"),
     ("📊", "Analysis", "You are here", "yellow"),
 ], highlight=3)
 
