@@ -33,7 +33,8 @@ pipeline_flow([
     ("🏆", "Evaluation", "You are here", "yellow"),
 ], highlight=3)
 
-REPORTS_DIR = Path("outputs/reports")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+REPORTS_DIR = PROJECT_ROOT / "outputs" / "reports"
 
 
 @st.cache_data

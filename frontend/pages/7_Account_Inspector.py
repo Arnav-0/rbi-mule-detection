@@ -32,10 +32,11 @@ pipeline_flow([
     ("📋", "Risk Report", "You are here", "yellow"),
 ], highlight=4)
 
-PROCESSED_DIR = Path("data/processed")
-RAW_DIR = Path("data/raw")
-PLOTS_DIR = Path("outputs/plots")
-SHAP_DIR = Path("outputs/shap_values")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
+RAW_DIR = PROJECT_ROOT / "data" / "raw"
+PLOTS_DIR = PROJECT_ROOT / "outputs" / "plots"
+SHAP_DIR = PROJECT_ROOT / "outputs" / "shap_values"
 
 
 @st.cache_data
@@ -49,7 +50,7 @@ def load_feature_matrix():
 
 @st.cache_data
 def load_predictions():
-    path = Path("outputs/predictions/submission.csv")
+    path = PROJECT_ROOT / "outputs" / "predictions" / "submission.csv"
     if path.exists():
         return pd.read_csv(path)
     return None
@@ -95,7 +96,7 @@ def load_transactions_for_account(account_id: str):
             result["transaction_date"] = pd.to_datetime(result["transaction_date"], errors="coerce")
         return result
     # Fall back to pre-computed sample
-    sample_path = Path("data/processed/transactions_sample.parquet")
+    sample_path = PROJECT_ROOT / "data" / "processed" / "transactions_sample.parquet"
     if sample_path.exists():
         df = pd.read_parquet(sample_path)
         if "account_id" in df.columns:
@@ -323,7 +324,7 @@ if account_id:
                 )].index)
             else:
                 # Use account_ids from SHAP data as fallback
-                acct_ids_path = Path("outputs/shap_values/account_ids.npy")
+                acct_ids_path = PROJECT_ROOT / "outputs" / "shap_values" / "account_ids.npy"
                 if acct_ids_path.exists():
                     train_ids = list(np.load(acct_ids_path, allow_pickle=True))
                 else:

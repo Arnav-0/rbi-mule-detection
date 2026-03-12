@@ -30,9 +30,10 @@ pipeline_flow([
     ("🧠", "Model Input", "Best model", "magenta"),
 ], highlight=2)
 
-PROCESSED_DIR = Path("data/processed")
-RAW_DIR = Path("data/raw")
-PLOTS_DIR = Path("outputs/plots")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
+RAW_DIR = PROJECT_ROOT / "data" / "raw"
+PLOTS_DIR = PROJECT_ROOT / "outputs" / "plots"
 
 
 @st.cache_data
@@ -54,7 +55,7 @@ def load_labels():
 
 @st.cache_data
 def load_shap_importance():
-    for d in [PLOTS_DIR, Path("outputs/shap_values")]:
+    for d in [PLOTS_DIR, PROJECT_ROOT / "outputs" / "shap_values"]:
         for ext in [".npy", ".npz"]:
             path = d / f"shap_values{ext}"
             if path.exists():

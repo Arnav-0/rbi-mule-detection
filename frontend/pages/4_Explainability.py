@@ -31,9 +31,10 @@ pipeline_flow([
     ("💬", "Explanation", "You are here", "yellow"),
 ], highlight=3)
 
-SHAP_DIR = Path("outputs/shap_values")
-PLOTS_DIR = Path("outputs/plots")
-OUTPUTS_DIR = Path("outputs")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+SHAP_DIR = PROJECT_ROOT / "outputs" / "shap_values"
+PLOTS_DIR = PROJECT_ROOT / "outputs" / "plots"
+OUTPUTS_DIR = PROJECT_ROOT / "outputs"
 
 
 @st.cache_data

@@ -32,8 +32,9 @@ pipeline_flow([
     ("👁", "Visualize", "You are here", "yellow"),
 ], highlight=4)
 
-PROCESSED_DIR = Path("data/processed")
-RAW_DIR = Path("data/raw")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
+RAW_DIR = PROJECT_ROOT / "data" / "raw"
 
 
 @st.cache_data

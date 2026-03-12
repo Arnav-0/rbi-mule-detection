@@ -19,10 +19,13 @@ if css_path.exists():
     st.markdown(f"<style>{css_path.read_text(encoding='utf-8')}</style>", unsafe_allow_html=True)
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
 @st.cache_data
 def get_live_stats():
-    processed = Path("data/processed")
-    raw = Path("data/raw")
+    processed = PROJECT_ROOT / "data" / "processed"
+    raw = PROJECT_ROOT / "data" / "raw"
     stats = {"accounts": "40,038", "features": "56", "models": "6",
              "transactions": "7.4M", "mule_rate": "1.09%", "auc": "N/A",
              "best_model": "N/A", "validation": "5-fold CV"}
@@ -39,7 +42,7 @@ def get_live_stats():
         rate = labels["is_mule"].mean() * 100
         stats["mule_rate"] = f"{rate:.2f}%"
     import json
-    bench_path = Path("outputs/reports/benchmark_results.json")
+    bench_path = PROJECT_ROOT / "outputs" / "reports" / "benchmark_results.json"
     if bench_path.exists():
         bench = json.loads(bench_path.read_text(encoding='utf-8'))
         if isinstance(bench, dict) and bench:
@@ -228,8 +231,8 @@ with tab_existing:
         if qt_go and qt_account:
             try:
                 import joblib
-                model = joblib.load("outputs/models/best_model.joblib")
-                feat_df = pd.read_parquet("data/processed/features_matrix.parquet")
+                model = joblib.load(str(PROJECT_ROOT / "outputs" / "models" / "best_model.joblib"))
+                feat_df = pd.read_parquet(str(PROJECT_ROOT / "data" / "processed" / "features_matrix.parquet"))
                 if qt_account in feat_df.index:
                     x = feat_df.loc[[qt_account]]
                     prob = float(model.predict_proba(x)[:, 1][0])
@@ -290,7 +293,7 @@ with tab_upload:
                     account_opening_date=csv_open_date if csv_open_date else None,
                     avg_balance=csv_balance,
                 )
-                model = joblib.load("outputs/models/best_model.joblib")
+                model = joblib.load(str(PROJECT_ROOT / "outputs" / "models" / "best_model.joblib"))
                 prob = float(model.predict_proba(features)[:, 1][0])
                 risk = "HIGH" if prob > 0.7 else ("MEDIUM" if prob > 0.4 else "LOW")
                 label = "MULE" if prob >= 0.5 else "LEGITIMATE"

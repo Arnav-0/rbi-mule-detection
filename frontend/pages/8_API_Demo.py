@@ -31,12 +31,14 @@ pipeline_flow([
     ("📋", "Response", "You are here", "yellow"),
 ], highlight=3)
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
 
 @st.cache_resource
 def load_model():
     try:
         import joblib
-        return joblib.load("outputs/models/best_model.joblib")
+        return joblib.load(str(PROJECT_ROOT / "outputs" / "models" / "best_model.joblib"))
     except Exception:
         return None
 
@@ -44,7 +46,7 @@ def load_model():
 @st.cache_data
 def load_feature_matrix():
     for name in ["features_matrix.parquet", "feature_matrix.parquet"]:
-        path = Path("data/processed") / name
+        path = PROJECT_ROOT / "data" / "processed" / name
         if path.exists():
             return pd.read_parquet(path)
     return None
@@ -52,9 +54,9 @@ def load_feature_matrix():
 
 @st.cache_data
 def load_shap_data():
-    shap_path = Path("outputs/plots/shap_values.npy")
-    names_path = Path("outputs/shap_values/feature_names.json")
-    ids_path = Path("outputs/shap_values/account_ids.npy")
+    shap_path = PROJECT_ROOT / "outputs" / "plots" / "shap_values.npy"
+    names_path = PROJECT_ROOT / "outputs" / "shap_values" / "feature_names.json"
+    ids_path = PROJECT_ROOT / "outputs" / "shap_values" / "account_ids.npy"
     vals = np.load(shap_path, allow_pickle=True) if shap_path.exists() else None
     names = json.loads(names_path.read_text(encoding='utf-8')) if names_path.exists() else None
     ids = list(np.load(ids_path, allow_pickle=True)) if ids_path.exists() else None
@@ -180,7 +182,7 @@ with tab_single:
                         )
 
                 # NL explanation
-                expl_path = Path("outputs/shap_values/explanations.json")
+                expl_path = PROJECT_ROOT / "outputs" / "shap_values" / "explanations.json"
                 if expl_path.exists():
                     explanations = json.loads(expl_path.read_text(encoding='utf-8'))
                     if account_id in explanations:
@@ -309,7 +311,7 @@ with tab_info:
 
     with col_model:
         section("Model Information")
-        bench_path = Path("outputs/reports/benchmark_results.json")
+        bench_path = PROJECT_ROOT / "outputs" / "reports" / "benchmark_results.json"
         if bench_path.exists():
             bench = json.loads(bench_path.read_text(encoding='utf-8'))
             if isinstance(bench, dict) and bench:
