@@ -49,6 +49,14 @@ def load_features():
 
 @st.cache_data
 def load_transactions_sample():
+    # Try pre-computed sample first (works on Streamlit Cloud)
+    sample_path = PROCESSED_DIR / "transactions_sample.parquet"
+    if sample_path.exists():
+        df = pd.read_parquet(sample_path)
+        if "transaction_date" in df.columns:
+            df["transaction_date"] = pd.to_datetime(df["transaction_date"], errors="coerce")
+        return df
+    # Fall back to raw CSV
     parts = sorted(RAW_DIR.glob("transactions_part_*.csv"))
     if not parts:
         return None

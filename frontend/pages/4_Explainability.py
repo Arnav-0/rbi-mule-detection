@@ -25,7 +25,7 @@ page_header(
 )
 
 pipeline_flow([
-    ("🧠", "Trained Model", "LightGBM", "purple"),
+    ("🧠", "Trained Model", "CatBoost", "purple"),
     ("🔬", "SHAP Explainer", "TreeExplainer", "magenta"),
     ("📊", "Feature Impact", "Per-account SHAP", "cyan"),
     ("💬", "Explanation", "You are here", "yellow"),

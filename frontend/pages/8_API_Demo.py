@@ -1,4 +1,4 @@
-"""Page 8: API Demo — live prediction interface."""
+"""Page 8: API Demo — live prediction interface (works without FastAPI server)."""
 
 import json
 import streamlit as st
@@ -21,62 +21,100 @@ from frontend.components.layout import page_header, section, empty_state, info_c
 st.set_page_config(page_title="API Demo | RBI Mule Detection", page_icon="🚀", layout="wide")
 page_header(
     "API Demo",
-    "Test the prediction API live — submit account IDs and get real-time mule risk scores with explanations"
+    "Test predictions live — submit account IDs and get real-time mule risk scores with explanations"
 )
 
 pipeline_flow([
-    ("📡", "REST Request", "Account ID", "cyan"),
-    ("🚀", "FastAPI", "13 endpoints", "purple"),
-    ("🧠", "Model", "LightGBM", "magenta"),
-    ("🔬", "Explain", "SHAP values", "pink"),
+    ("📡", "Input", "Account ID", "cyan"),
+    ("🧠", "Model", "CatBoost", "purple"),
+    ("🔬", "Explain", "SHAP + features", "magenta"),
     ("📋", "Response", "You are here", "yellow"),
-], highlight=4)
-
-API_BASE = "http://localhost:8001"
+], highlight=3)
 
 
-def try_api_call(endpoint: str, method: str = "GET", json_data: dict = None):
-    """Make API call with error handling."""
+@st.cache_resource
+def load_model():
     try:
-        import requests
-        if method == "GET":
-            resp = requests.get(f"{API_BASE}{endpoint}", timeout=5)
-        else:
-            resp = requests.post(f"{API_BASE}{endpoint}", json=json_data, timeout=10)
-        return resp.json(), resp.status_code
-    except ImportError:
-        return {"error": "requests library not installed. Run: pip install requests"}, 500
-    except Exception as e:
-        return {"error": str(e)}, 500
+        import joblib
+        return joblib.load("outputs/models/best_model.joblib")
+    except Exception:
+        return None
 
 
-# --- Sidebar: Health Check & Info ---
+@st.cache_data
+def load_feature_matrix():
+    for name in ["features_matrix.parquet", "feature_matrix.parquet"]:
+        path = Path("data/processed") / name
+        if path.exists():
+            return pd.read_parquet(path)
+    return None
+
+
+@st.cache_data
+def load_shap_data():
+    shap_path = Path("outputs/plots/shap_values.npy")
+    names_path = Path("outputs/shap_values/feature_names.json")
+    ids_path = Path("outputs/shap_values/account_ids.npy")
+    vals = np.load(shap_path, allow_pickle=True) if shap_path.exists() else None
+    names = json.loads(names_path.read_text(encoding='utf-8')) if names_path.exists() else None
+    ids = list(np.load(ids_path, allow_pickle=True)) if ids_path.exists() else None
+    return vals, names, ids
+
+
+def predict_account(model, feat_df, account_id, threshold=0.5):
+    """Predict mule probability for an account."""
+    if account_id not in feat_df.index:
+        return None
+    x = feat_df.loc[[account_id]]
+    prob = float(model.predict_proba(x)[:, 1][0])
+    label = "MULE" if prob >= threshold else "LEGITIMATE"
+    risk = "HIGH" if prob > 0.7 else ("MEDIUM" if prob > 0.4 else "LOW")
+    # Top features by importance
+    importances = model.feature_importances_
+    feat_vals = x.iloc[0]
+    top_idx = importances.argsort()[::-1][:5]
+    top_features = []
+    for i in top_idx:
+        top_features.append({
+            "feature": feat_df.columns[i],
+            "importance": float(importances[i]),
+            "value": float(feat_vals.iloc[i]),
+        })
+    return {"probability": prob, "label": label, "risk": risk, "top_features": top_features}
+
+
+model = load_model()
+feat_df = load_feature_matrix()
+shap_vals, shap_names, shap_ids = load_shap_data()
+
+# Sidebar
 with st.sidebar:
-    st.markdown("### API Status")
-    if st.button("Check Health", use_container_width=True):
-        data, status = try_api_call("/health")
-        if status == 200:
-            st.success(f"API Healthy: v{data.get('version', '?')}")
-        else:
-            st.error("API unreachable")
-    st.markdown("")
-    st.markdown(f"**Base URL:** `{API_BASE}`")
-    st.markdown(f"**Docs:** `{API_BASE}/docs`")
-    st.markdown(f"**Redoc:** `{API_BASE}/redoc`")
+    st.markdown("### Prediction Engine")
+    if model is not None:
+        st.success("Model loaded")
+    else:
+        st.error("Model not found")
+    if feat_df is not None:
+        st.success(f"{len(feat_df):,} accounts available")
+    else:
+        st.error("Feature matrix not found")
     st.markdown("")
     st.markdown(
         "<div style='color:#7b6cbf; font-size:0.78rem; line-height:1.6;'>"
-        "The FastAPI backend serves predictions via REST endpoints. "
-        "Start it with: <code>make api</code>"
+        "Predictions run directly using the trained CatBoost model. "
+        "No API server required."
         "</div>",
         unsafe_allow_html=True,
     )
 
+if model is None or feat_df is None:
+    empty_state("Model or feature data not available", "Ensure model and features are committed to the repo.")
+    st.stop()
+
 info_callout(
     "How this works",
-    "This page connects to the FastAPI backend running on port 8001. "
-    "You can submit individual account IDs or batches for real-time scoring. "
-    "Each prediction includes a probability, classification, and the top features driving the decision."
+    "Submit account IDs for real-time scoring using the trained CatBoost model. "
+    "Each prediction includes a probability, classification, risk level, and the top features driving the decision."
 )
 
 # --- Tabs ---
@@ -100,109 +138,111 @@ with tab_single:
 
     with col_result:
         if predict_btn and account_id:
-            with st.spinner("Calling prediction API..."):
-                data, status = try_api_call("/predict", method="POST",
-                                            json_data={"account_id": account_id, "threshold": threshold})
+            result = predict_account(model, feat_df, account_id, threshold)
+            if result:
+                prob = result["probability"]
 
-            if status == 200:
-                prob = data.get("probability", 0)
-                label = data.get("label", "UNKNOWN")
-                top_features = data.get("top_features", [])
-
-                # Gauge
                 fig = plot_gauge(prob, title=f"Mule Probability: {account_id}")
                 st.plotly_chart(fig, use_container_width=True)
 
-                # Result metrics
                 rc1, rc2, rc3 = st.columns(3)
                 with rc1:
                     st.metric("Probability", f"{prob:.4f}")
                 with rc2:
-                    st.metric("Prediction", label)
+                    st.metric("Prediction", result["label"])
                 with rc3:
-                    st.metric("Model Version", data.get("model_version", "v1"))
+                    st.metric("Risk Level", result["risk"])
 
-                # Top SHAP features
-                if top_features:
-                    section("Top Contributing Features")
-                    for feat in top_features[:5]:
-                        name = feat.get("feature", feat.get("name", "?"))
-                        value = feat.get("shap_value", feat.get("value", 0))
-                        direction = "increases" if value > 0 else "decreases"
-                        color = NEON_PINK if value > 0 else NEON_BLUE
+                section("Top Contributing Features")
+                for feat in result["top_features"]:
+                    st.markdown(
+                        f"**{feat['feature']}** — importance: {feat['importance']:.4f}, "
+                        f"value: {feat['value']:.4f}"
+                    )
+
+                # SHAP explanation if available
+                if shap_vals is not None and shap_ids and account_id in shap_ids:
+                    acc_idx = shap_ids.index(account_id)
+                    acc_shap = shap_vals[acc_idx]
+                    sorted_idx = np.argsort(np.abs(acc_shap))[::-1][:5]
+                    st.markdown("")
+                    section("SHAP Explanation")
+                    for i in sorted_idx:
+                        val = acc_shap[i]
+                        name = shap_names[i] if shap_names else f"feature_{i}"
+                        direction = "increases" if val > 0 else "decreases"
+                        color = NEON_PINK if val > 0 else NEON_BLUE
                         st.markdown(
                             f"<span style='color:{color};font-weight:bold;'>"
-                            f"{'+'if value > 0 else ''}{value:.4f}</span> "
+                            f"{'+'if val > 0 else ''}{val:.4f}</span> "
                             f"**{name}** {direction} risk",
                             unsafe_allow_html=True,
                         )
 
-                # Natural language
-                nl = data.get("natural_language", "")
-                if nl:
-                    st.markdown("")
-                    section("Explanation")
-                    st.info(nl)
-
-                with st.expander("Raw API Response"):
-                    st.json(data)
+                # NL explanation
+                expl_path = Path("outputs/shap_values/explanations.json")
+                if expl_path.exists():
+                    explanations = json.loads(expl_path.read_text(encoding='utf-8'))
+                    if account_id in explanations:
+                        nl = explanations[account_id]
+                        if isinstance(nl, dict):
+                            nl = nl.get("natural_language", "")
+                        if nl:
+                            st.markdown("")
+                            section("Natural Language Explanation")
+                            st.info(nl)
             else:
-                st.error(f"API Error (status {status})")
-                st.json(data)
-
+                st.warning(f"Account `{account_id}` not found in feature matrix.")
         elif predict_btn:
             st.warning("Please enter an account ID.")
 
-    # --- Threshold Sensitivity ---
-    if account_id:
+    # Threshold sensitivity
+    if account_id and account_id in feat_df.index:
         st.markdown("")
         section("Threshold Sensitivity Analysis")
         info_callout(
             "What is this?",
             "This chart shows how the account's classification changes at different thresholds. "
-            "Red bars = classified as MULE at that threshold. Cyan = LEGITIMATE. "
-            "This helps you pick the right operating point."
+            "Red bars = classified as MULE at that threshold. Cyan = LEGITIMATE."
         )
-        data, status = try_api_call("/predict", method="POST",
-                                    json_data={"account_id": account_id, "threshold": 0.5})
-        if status == 200:
-            prob = data.get("probability", 0)
-            thresholds = np.arange(0.1, 0.95, 0.05)
+        x = feat_df.loc[[account_id]]
+        prob = float(model.predict_proba(x)[:, 1][0])
+        thresholds = np.arange(0.1, 0.95, 0.05)
 
-            fig = go.Figure()
-            fig.add_hline(y=prob, line_dash="solid", line_color=NEON_PURPLE,
-                          annotation_text=f"Probability: {prob:.4f}",
-                          annotation_font_color=NEON_PURPLE)
+        fig = go.Figure()
+        fig.add_hline(y=prob, line_dash="solid", line_color=NEON_PURPLE,
+                      annotation_text=f"Probability: {prob:.4f}",
+                      annotation_font_color=NEON_PURPLE)
 
-            bar_colors = [NEON_PINK if prob >= t else NEON_CYAN for t in thresholds]
-            fig.add_trace(go.Bar(
-                x=[f"{t:.2f}" for t in thresholds],
-                y=[prob] * len(thresholds),
-                marker=dict(color=bar_colors, opacity=0.7,
-                            line=dict(color="rgba(123,97,255,0.12)", width=0.5)),
-                showlegend=False,
-                hovertemplate="Threshold: %{x}<br>Probability: %{y:.4f}<extra></extra>",
-            ))
+        bar_colors = [NEON_PINK if prob >= t else NEON_CYAN for t in thresholds]
+        fig.add_trace(go.Bar(
+            x=[f"{t:.2f}" for t in thresholds],
+            y=[prob] * len(thresholds),
+            marker=dict(color=bar_colors, opacity=0.7,
+                        line=dict(color="rgba(123,97,255,0.12)", width=0.5)),
+            showlegend=False,
+            hovertemplate="Threshold: %{x}<br>Probability: %{y:.4f}<extra></extra>",
+        ))
 
-            fig.update_layout(
-                title=f"<b>Threshold Sensitivity — {account_id}</b>",
-                xaxis_title="Threshold", yaxis_title="Probability",
-                yaxis=dict(range=[0, 1]),
-                height=380,
-            )
-            st.plotly_chart(_apply_theme(fig), use_container_width=True)
+        fig.update_layout(
+            title=f"<b>Threshold Sensitivity — {account_id}</b>",
+            xaxis_title="Threshold", yaxis_title="Probability",
+            yaxis=dict(range=[0, 1]),
+            height=380,
+        )
+        st.plotly_chart(_apply_theme(fig), use_container_width=True)
 
-            neon_legend([
-                (NEON_PINK, "Classified as MULE"),
-                (NEON_CYAN, "Classified as LEGITIMATE"),
-            ])
+        neon_legend([
+            (NEON_PINK, "Classified as MULE"),
+            (NEON_CYAN, "Classified as LEGITIMATE"),
+        ])
 
 with tab_batch:
     section("Batch Prediction")
     info_callout(
         "Batch scoring",
-        "Submit multiple account IDs at once. The API will score all of them and return "
-        "results in a table, along with a distribution chart showing how many were flagged."
+        "Submit multiple account IDs at once for scoring. "
+        "Results include probability, classification, and a distribution chart."
     )
 
     col_batch_input, col_batch_result = st.columns([1, 2])
@@ -220,45 +260,47 @@ with tab_batch:
         if batch_btn:
             ids = [line.strip() for line in batch_input.strip().split("\n") if line.strip()]
             if ids:
-                with st.spinner(f"Predicting {len(ids)} accounts..."):
-                    data, status = try_api_call("/predict/batch", method="POST",
-                                                json_data={"account_ids": ids, "threshold": batch_threshold})
-                if status == 200:
-                    bc1, bc2, bc3 = st.columns(3)
-                    with bc1:
-                        st.metric("Total", data.get("total", 0))
-                    with bc2:
-                        st.metric("Flagged", data.get("flagged", 0))
-                    with bc3:
-                        total = data.get("total", 1)
-                        flagged = data.get("flagged", 0)
-                        st.metric("Flag Rate", f"{flagged/total:.1%}" if total > 0 else "N/A")
+                results = []
+                for aid in ids:
+                    r = predict_account(model, feat_df, aid, batch_threshold)
+                    if r:
+                        results.append({"account_id": aid, "probability": r["probability"],
+                                       "prediction": r["label"], "risk": r["risk"]})
+                    else:
+                        results.append({"account_id": aid, "probability": None,
+                                       "prediction": "NOT FOUND", "risk": "N/A"})
 
-                    preds = data.get("predictions", [])
-                    if preds:
-                        df = pd.DataFrame(preds)
-                        st.dataframe(df, use_container_width=True, hide_index=True)
+                df = pd.DataFrame(results)
+                flagged = sum(1 for r in results if r["prediction"] == "MULE")
+                total = len(results)
 
-                        # Distribution of predictions
-                        if "probability" in df.columns:
-                            fig = go.Figure(go.Histogram(
-                                x=df["probability"],
-                                nbinsx=20,
-                                marker=dict(color=NEON_PURPLE, opacity=0.85,
-                                            line=dict(color="rgba(123,97,255,0.12)", width=0.5)),
-                            ))
-                            fig.add_vline(x=batch_threshold, line_dash="dash",
-                                          line_color=NEON_YELLOW,
-                                          annotation_text=f"Threshold: {batch_threshold}")
-                            fig.update_layout(
-                                title="<b>Prediction Distribution</b>",
-                                xaxis_title="Probability", yaxis_title="Count",
-                                height=300,
-                            )
-                            st.plotly_chart(_apply_theme(fig), use_container_width=True)
-                else:
-                    st.error(f"API Error: {status}")
-                    st.json(data)
+                bc1, bc2, bc3 = st.columns(3)
+                with bc1:
+                    st.metric("Total", total)
+                with bc2:
+                    st.metric("Flagged", flagged)
+                with bc3:
+                    st.metric("Flag Rate", f"{flagged/total:.1%}" if total > 0 else "N/A")
+
+                st.dataframe(df, use_container_width=True, hide_index=True)
+
+                valid_probs = df["probability"].dropna()
+                if len(valid_probs) > 0:
+                    fig = go.Figure(go.Histogram(
+                        x=valid_probs,
+                        nbinsx=20,
+                        marker=dict(color=NEON_PURPLE, opacity=0.85,
+                                    line=dict(color="rgba(123,97,255,0.12)", width=0.5)),
+                    ))
+                    fig.add_vline(x=batch_threshold, line_dash="dash",
+                                  line_color=NEON_YELLOW,
+                                  annotation_text=f"Threshold: {batch_threshold}")
+                    fig.update_layout(
+                        title="<b>Prediction Distribution</b>",
+                        xaxis_title="Probability", yaxis_title="Count",
+                        height=300,
+                    )
+                    st.plotly_chart(_apply_theme(fig), use_container_width=True)
             else:
                 st.warning("Enter at least one account ID.")
 
@@ -267,45 +309,32 @@ with tab_info:
 
     with col_model:
         section("Model Information")
-        if st.button("Fetch Model Info", use_container_width=True):
-            data, status = try_api_call("/model/info")
-            if status == 200:
-                for key, val in data.items():
-                    if key != "features":
-                        st.metric(key.replace("_", " ").title(), str(val))
-                with st.expander("Raw Response"):
-                    st.json(data)
-            else:
-                st.error(f"Error: {status}")
-                st.json(data)
+        bench_path = Path("outputs/reports/benchmark_results.json")
+        if bench_path.exists():
+            bench = json.loads(bench_path.read_text(encoding='utf-8'))
+            if isinstance(bench, dict) and bench:
+                best_name = max(bench.keys(),
+                               key=lambda k: bench[k].get("metrics", {}).get("auc_roc", 0))
+                best = bench[best_name]
+                st.metric("Best Model", best.get("model_type", best_name))
+                st.metric("AUC-ROC", f"{best.get('metrics', {}).get('auc_roc', 0):.4f}")
+                st.metric("Features", best.get("n_features", "?"))
+                st.metric("Training Samples", f"{best.get('n_train', 0):,}")
+                st.metric("Validation", best.get("validation", "N/A"))
+                with st.expander("Full Benchmark Data"):
+                    st.json(bench)
 
     with col_features:
         section("Feature Information")
-        if st.button("Fetch Feature List", use_container_width=True):
-            data, status = try_api_call("/model/features")
-            if status == 200:
-                st.metric("Total Features", data.get("total", 0))
-                groups = data.get("groups", {})
-                if groups:
-                    for group, feats in groups.items():
-                        with st.expander(f"{group} ({len(feats)} features)"):
-                            for f in feats:
-                                st.markdown(f"- `{f}`")
-            else:
-                st.error(f"Error: {status}")
-
-    # Dashboard stats
-    st.markdown("")
-    section("Dashboard Statistics")
-    if st.button("Fetch Dashboard Stats", use_container_width=True):
-        data, status = try_api_call("/dashboard/stats")
-        if status == 200:
-            ds_cols = st.columns(4)
-            items = list(data.items())
-            for i, (key, val) in enumerate(items[:4]):
-                with ds_cols[i]:
-                    st.metric(key.replace("_", " ").title(), str(val))
-            with st.expander("Full Response"):
-                st.json(data)
-        else:
-            st.error(f"Error: {status}")
+        from src.features.registry import FEATURE_REGISTRY, get_features_by_group
+        groups = {}
+        for name, meta in FEATURE_REGISTRY.items():
+            g = meta["group"]
+            if g not in groups:
+                groups[g] = []
+            groups[g].append(name)
+        st.metric("Total Features", len(FEATURE_REGISTRY))
+        for group, feats in sorted(groups.items()):
+            with st.expander(f"{group} ({len(feats)} features)"):
+                for f in feats:
+                    st.markdown(f"- `{f}` — {FEATURE_REGISTRY[f]['description']}")

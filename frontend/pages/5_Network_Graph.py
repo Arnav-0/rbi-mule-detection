@@ -137,9 +137,11 @@ if edges is not None:
         ]
 
     test_ids = set()
-    test_path = RAW_DIR / "test_accounts.csv"
-    if test_path.exists():
-        test_ids = set(pd.read_csv(test_path)["account_id"])
+    for test_dir in [RAW_DIR, PROCESSED_DIR.parent / "raw"]:
+        test_path = test_dir / "test_accounts.csv"
+        if test_path.exists():
+            test_ids = set(pd.read_csv(test_path)["account_id"])
+            break
 
     # Stats
     all_nodes = set(filtered["account_id"]) | set(filtered["counterparty_id"])

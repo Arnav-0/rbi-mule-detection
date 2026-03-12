@@ -26,7 +26,7 @@ page_header(
 
 pipeline_flow([
     ("🔎", "Account ID", "User input", "cyan"),
-    ("⚙️", "Features", "57 values", "purple"),
+    ("⚙️", "Features", "56 values", "purple"),
     ("🧠", "Predict", "Mule probability", "magenta"),
     ("📊", "SHAP", "Feature impact", "pink"),
     ("📋", "Risk Report", "You are here", "yellow"),
@@ -77,7 +77,8 @@ def load_shap_data():
 
 @st.cache_data
 def load_transactions_for_account(account_id: str):
-    """Load transactions for a specific account from raw CSVs."""
+    """Load transactions for a specific account from raw CSVs or pre-computed sample."""
+    # Try raw CSVs first
     parts = sorted(RAW_DIR.glob("transactions_part_*.csv"))
     txn_list = []
     for p in parts:
@@ -93,6 +94,16 @@ def load_transactions_for_account(account_id: str):
         if "transaction_date" in result.columns:
             result["transaction_date"] = pd.to_datetime(result["transaction_date"], errors="coerce")
         return result
+    # Fall back to pre-computed sample
+    sample_path = Path("data/processed/transactions_sample.parquet")
+    if sample_path.exists():
+        df = pd.read_parquet(sample_path)
+        if "account_id" in df.columns:
+            acc_txn = df[df["account_id"] == account_id]
+            if len(acc_txn) > 0:
+                if "transaction_date" in acc_txn.columns:
+                    acc_txn["transaction_date"] = pd.to_datetime(acc_txn["transaction_date"], errors="coerce")
+                return acc_txn
     return None
 
 
@@ -305,9 +316,18 @@ if account_id:
             "a mule classification. Red bars increase mule risk, blue bars decrease it."
         )
         if shap_vals is not None and shap_names and feat_df is not None and account_id in feat_df.index:
-            train_ids = list(feat_df.loc[feat_df.index.isin(
-                pd.read_csv(RAW_DIR / "train_labels.csv")["account_id"]
-            )].index)
+            labels_path = RAW_DIR / "train_labels.csv"
+            if labels_path.exists():
+                train_ids = list(feat_df.loc[feat_df.index.isin(
+                    pd.read_csv(labels_path)["account_id"]
+                )].index)
+            else:
+                # Use account_ids from SHAP data as fallback
+                acct_ids_path = Path("outputs/shap_values/account_ids.npy")
+                if acct_ids_path.exists():
+                    train_ids = list(np.load(acct_ids_path, allow_pickle=True))
+                else:
+                    train_ids = []
             if account_id in train_ids:
                 acc_idx = train_ids.index(account_id)
                 if acc_idx < shap_vals.shape[0]:
@@ -350,7 +370,7 @@ if account_id:
         section("Feature Values")
         info_callout(
             "Raw feature values",
-            "These are the 57 engineered features computed for this account. "
+            "These are the 56 engineered features computed for this account. "
             "Each value feeds into the model alongside the SHAP explanation above."
         )
         if feat_df is not None and account_id in feat_df.index:

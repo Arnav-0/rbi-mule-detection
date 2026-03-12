@@ -1,5 +1,9 @@
 # Data files (large CSVs — not for version control)
-data/raw/
+data/raw/transactions_part_*.csv
+data/raw/accounts.csv
+data/raw/customers.csv
+data/raw/product_details.csv
+data/raw/customer_account_linkage.csv
 
 # Large database files
 outputs/db/
@@ -7,6 +11,9 @@ outputs/logs/
 
 # CatBoost training artifacts
 catboost_info/
+
+# pyvis auto-generated JS
+lib/
 
 # Python
 __pycache__/
