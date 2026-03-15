@@ -353,3 +353,22 @@ with st.sidebar:
     """)
     st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
     st.caption("Reserve Bank of India Innovation Hub")
+    with st.expander("Debug: File Status", expanded=False):
+        import os
+        st.text(f"CWD: {os.getcwd()}")
+        st.text(f"ROOT: {PROJECT_ROOT}")
+        check_files = {
+            "features_matrix": PROJECT_ROOT / "data" / "processed" / "features_matrix.parquet",
+            "train_labels": PROJECT_ROOT / "data" / "raw" / "train_labels.csv",
+            "test_accounts": PROJECT_ROOT / "data" / "raw" / "test_accounts.csv",
+            "txn_sample": PROJECT_ROOT / "data" / "processed" / "transactions_sample.parquet",
+            "txn_edges": PROJECT_ROOT / "data" / "processed" / "transaction_edges.parquet",
+            "benchmark": PROJECT_ROOT / "outputs" / "reports" / "benchmark_results.json",
+            "best_model": PROJECT_ROOT / "outputs" / "models" / "best_model.joblib",
+            "shap_values": PROJECT_ROOT / "outputs" / "plots" / "shap_values.npy",
+            "fairness": PROJECT_ROOT / "outputs" / "reports" / "fairness_report.json",
+        }
+        for name, path in check_files.items():
+            exists = path.exists()
+            size = f"{path.stat().st_size / 1024:.0f}KB" if exists else "MISSING"
+            st.text(f"{'✓' if exists else '✗'} {name}: {size}")
